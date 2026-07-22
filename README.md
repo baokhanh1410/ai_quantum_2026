@@ -89,27 +89,43 @@ streamlit run src/app/app.py
 
 ```
 .
-├── config/                  # Market, Model, and Asset YAML configurations
-│   ├── assets.yaml
-│   ├── market.yaml
-│   └── model.yaml
+├── config/                      # YAML Configuration Layer
+│   ├── assets.yaml              # Asset class definitions & settlement locks
+│   ├── config.yaml              # Global project & API endpoints settings
+│   ├── features.yaml            # Technical & macro indicators catalog
+│   ├── market.yaml              # Vietnam market rules (T+2, Lot 100, fees)
+│   ├── model.yaml               # DRL Hyperparameters & training timelines
+│   └── sector_mapping.yaml      # ICB sector to HOSE index mapping
+├── database/                    # Database DDL Schemas
+│   └── schema.sql               # MySQL relational database tables DDL
 ├── src/
-│   ├── app/                 # Streamlit Demo Application
-│   │   ├── app.py           # Homepage
-│   │   ├── components/      # Chart wrappers and Session State manager
-│   │   └── pages/           # 1_Data_Overview, 2_Train_Model, 3_Analysis
-│   └── pipeline/            # Core System Engines
-│       ├── core/            # Database & Settings core utilities
-│       └── model_engine/    # DRL Environment, Algorithms & Metrics
-│           ├── env/         # StockTradingEnv with T+2 & Lot 100
-│           ├── models/      # DRLEnsembleStrategy (A2C, PPO, DDPG)
-│           ├── analysis/    # MetricsAnalyzer & ModelVisualizer
-│           └── notebook.py  # Interactive Jupyter/Python Pipeline
-├── requirements.txt         # Python Dependencies
-└── README.md
-
-
+│   ├── app/                     # Streamlit Interactive Web Application
+│   │   ├── app.py               # Application Entry Point & System Overview
+│   │   ├── components/          # State management & Plotly chart renderers
+│   │   └── pages/               # 1_Data_Overview, 2_Train_Model, 3_Analysis
+│   └── pipeline/                # Core 3-Engine Architecture
+│       ├── core/                # Core database connection & settings loader
+│       ├── data_engine/         # 1. Automated Data Ingestion Engine
+│       │   ├── api/             # Market API Clients (vnstock, SBV, TradingView, Yahoo)
+│       │   ├── handlers/        # Data format normalization handlers
+│       │   ├── processors/      # OHLCV validation & cleaning
+│       │   └── services/        # Ingestion pipeline orchestrator
+│       ├── feature_engine/      # 2. Technical & Macro Feature Engine
+│       │   ├── database/        # DuckDB & MySQL feature storage repositories
+│       │   ├── processors/      # Technical indicator calculators (RSI, PPO, CCI...)
+│       │   └── services/        # Feature calculation pipeline service
+│       └── model_engine/        # 3. Deep Reinforcement Learning Engine
+│           ├── analysis/        # MetricsAnalyzer (Sharpe, MDD, Alpha) & Visualizer
+│           ├── data/            # DataQueryService for DRL environment
+│           ├── env/             # StockTradingEnv (T+2, Lot 100, Cash Allocation)
+│           ├── models/          # DRLEnsembleStrategy (PPO, A2C, DDPG)
+│           └── notebook.py      # Standalone training & backtesting pipeline
+├── DATABASE.md                  # Database Architecture Documentation
+├── MODEL.md                     # Model Engine & DRL Technical Documentation
+├── README.md                    # Project Master Guide
+└── requirements.txt             # Python Dependencies
 ```
+
 
 ---
 

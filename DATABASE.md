@@ -13,7 +13,7 @@ Cơ sở dữ liệu được thiết kế theo chuẩn **Third Normal Form (3NF
 >
 > MySQL chỉ lưu dữ liệu đã chuẩn hóa.
 >
-> Feature Vector sử dụng để huấn luyện mô hình RL sẽ được sinh ra trong quá trình ETL (DuckDB/Parquet), **không lưu trực tiếp trong MySQL**.
+
 
 ---
 
