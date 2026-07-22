@@ -1,0 +1,76 @@
+system:
+  project_name: "portfolio-constrained-rl"
+  version: "1.0.0"
+  start_date: "2018-01-01"
+  end_date: null  # null defaults to current date dynamically
+
+database:
+  mysql:
+    host: "${MYSQL_HOST}"
+    port: "${MYSQL_PORT}"
+    user: "${MYSQL_USER}"
+    password: "${MYSQL_PASSWORD}"
+    database: "${MYSQL_DATABASE}"
+  duckdb:
+    path: "${DUCKDB_PATH}"
+
+apis:
+  vnstock:
+    name: "vnstock Library"
+    hose_symbols: ["VN30"]
+    source: ""
+    resolution: "1D"
+    type: "stock"
+  vndirect_sector_indices:
+    name: "VNDirect Sector Indices API"
+    url: "https://dchart-api.vndirect.com.vn/dchart/history"
+    method: "GET"
+    resolution: "D"
+    headers:
+      User-Agent: "${USER_AGENT}"
+      Referer: "https://stock.vndirect.com.vn/"
+    symbols: ["VNFIN", "VNREAL", "VNMAT", "VNIND", "VNCONS", "VNCOND", "VNENE", "VNUTI", "VNIT", "VNHEAL"]
+
+  sjc_crawler:
+    name: "SJC Gold Price History Crawler"
+    url: "https://raw.githubusercontent.com/vkhuy/SJC-price/main/docs/data/sjc_final.csv"
+    method: "GET"
+
+  techcom_capital:
+    name: "Techcom Capital TCBF Daily Report"
+    folder_path: "tcbf_sheet"
+
+  sbv_crawler:
+    name: "State Bank of Vietnam (SBV) Interbank Interest Rates"
+    url: "https://sbv.gov.vn/o/headless-delivery/v1.0/content-structures/3450260/structured-contents"
+    method: "GET"
+    headers:
+      User-Agent: "${USER_AGENT}"
+      Referer: "https://sbv.gov.vn/"
+      Accept: "application/json, text/plain, */*"
+    default_params:
+      pageSize: 100
+      page: 1
+      sort: "datePublished:desc"
+    cash_symbol: "VNIBOR_ON"
+    maturity_mapping:
+      "Qua đêm": "VNIBOR_ON"
+
+  yahoo_finance:
+    name: "Yahoo Finance API"
+    resolution: "1d"
+    symbols:
+      DXY: "DX-Y.NYB"      # US Dollar Index (Standard NYB)
+      XAUUSD: "GC=F"       # COMEX Gold Futures
+      USDVND: "USDVND=X"   # USD/VND Exchange Rate
+
+  tradingview:
+    name: "TradingView TVC Data"
+    resolution: "1d"       # Corresponds to Interval.in_daily
+    symbols:
+      VN10Y:
+        symbol: "VN10Y"
+        exchange: "TVC"
+      VN3Y:
+        symbol: "VN03Y"    # Standard symbol for TradingView 3Y bond yield
+        exchange: "TVC"

@@ -1,0 +1,50 @@
+model_engine:
+  # Data splitting timelines
+  train_start_date: "2018-06-25"
+  train_end_date: "2020-12-31"
+  val_start_date: "2021-01-01"
+  val_end_date: "2021-12-31"
+
+  # Asset selection (Filter by asset class IDs)
+  target_asset_class_ids: [6, 7, 8] # Includes Sector indices (7) and Macro indicators (6, 8)
+
+
+  # Dynamic Input Features from Database
+  features:
+    - "RSI"
+    - "PPO"
+    - "CCI"
+    - "ADX"
+    - "ATR"
+    - "VOLATILITY"
+    - "YIELD_CURVE_SLOPE"
+    - "DXY_LOG_RETURN"
+    - "VNIBOR_ON"
+
+  # Environment constraints
+  transaction_cost_pct: 0.001
+  initial_balance: 1000000000 # 1 Billion VND
+  turbulence_threshold: 100 # Arbitrary initial threshold
+
+  # Rolling Horizon Episode Settings
+  episode_length: 60       # 60 trading days (~1 Quarter) or 252 (~1 Year)
+  random_start: true       # Random start date in training mode
+
+  # Training hyperparameters
+  algorithms:
+    ppo:
+      learning_rate: 0.00025
+      batch_size: 64
+      n_steps: 2048
+      ent_coef: 0.01
+    a2c:
+      learning_rate: 0.0007
+      n_steps: 5
+      ent_coef: 0.01
+    ddpg:
+      learning_rate: 0.001
+      batch_size: 128
+      buffer_size: 50000
+
+  # Ensemble strategy
+  rolling_window_months: 3 # Train on data, validate on 3 months, then test on next quarter

@@ -1,0 +1,101 @@
+asset_class:
+  STOCK_HOSE:
+    asset_class_id: 1
+    locked_days: 2          # T+2 Settlement Lock
+    description: "HOSE Listed Equities"
+    price_limit_ratio: 0.07  # Daily Price Limit +/- 7%
+    handler: "vnstock"
+
+  STOCK_HNX:
+    asset_class_id: 2
+    locked_days: 2          # T+2 Settlement Lock
+    description: "HNX Listed Equities"
+    price_limit_ratio: 0.10  # Daily Price Limit +/- 10%
+    handler: "vnstock"
+
+  STOCK_UPCOM:
+    asset_class_id: 3
+    locked_days: 2          # T+2 Settlement Lock
+    description: "UPCoM Listed Equities"
+    price_limit_ratio: 0.15  # Daily Price Limit +/- 15%
+    handler: "vnstock"
+
+  BOND_FUND:
+    asset_class_id: 4
+    locked_days: 2          # T+2 Redemption Delay
+    description: "Bond Fund Certificates"
+    price_limit_ratio: null # Unconstrained
+    handler: "techcom_capital"
+
+  GOLD:
+    asset_class_id: 5
+    locked_days: 0          # T+0 Immediate Liquidity
+    description: "SJC Physical Gold"
+    price_limit_ratio: null # Unconstrained
+    handler: "sjc_crawler"
+
+  CASH:
+    asset_class_id: 6
+    locked_days: 0          # T+0 Immediate Availability
+    description: "Cash / Risk-Free Interest"
+    price_limit_ratio: 0.0
+    handler: "sbv_crawler"
+
+  SECTOR_INDEX:
+    asset_class_id: 7
+    locked_days: 2
+    description: "HOSE Sector Indices"
+    price_limit_ratio: 0.07  # Daily Price Limit +/- 7%
+    handler: "vndirect"
+
+
+  MACRO_INDEX:
+    asset_class_id: 8       # Isolated asset class for macro indicators and rates
+    locked_days: 0
+    description: "Macro indicators, exchange rates, and yields"
+    price_limit_ratio: null
+    handler: null
+
+macro_indices:
+  VN_SECTORS:
+    asset_class_id: 7
+    symbol: ["VNFIN", "VNREAL", "VNMAT", "VNIND", "VNCONS", "VNCOND", "VNENE", "VNUTI", "VNIT", "VNHEAL"]
+    description: "Major Vietnam Sector Indices"
+    handler: "vndirect"
+    data_format: "ohlcv"    # Store full OHLCV
+
+  DXY:
+    asset_class_id: 8
+    symbol: "DXY"
+    description: "US Dollar Index (DXY)"
+    handler: "yahoo_finance"
+    data_format: "ohlcv"    # Store full OHLCV
+
+  GOV_BOND_3Y:
+    asset_class_id: 8
+    symbol: "VN3YT"
+    description: "Vietnam 3-Year Government Bond Yield"
+    handler: "tradingview"
+    data_format: "single_value" 
+
+  GOV_BOND_10Y:
+    asset_class_id: 8
+    symbol: "VN10YT"
+    description: "Vietnam 10-Year Government Bond Yield"
+    handler: "tradingview"
+    data_format: "single_value" 
+
+  USDVND:
+    asset_class_id: 8
+    symbol: "USDVND"
+    description: "USD/VND Exchange Rate"
+    handler: "yahoo_finance"
+    data_format: "ohlcv"    
+
+  XAUUSD:
+    asset_class_id: 8
+    symbol: "XAUUSD"
+    description: "Spot Gold Price (XAU/USD)"
+    handler: "yahoo_finance"
+    data_format: "ohlcv"
+    

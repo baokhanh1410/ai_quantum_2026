@@ -1,0 +1,32 @@
+# market.yaml - Microstructure Configuration for Vietnam Stock Market
+market_settings:
+  market_name: "Vietnam Stock Market (HOSE/HNX/UPCoM)"
+  currency: "VND"
+  trading_days_per_year: 252
+
+# 1. Transaction Costs & Tax Schedules
+transaction_costs:
+  brokerage_fee_buy: 0.0015       # Buy brokerage fee (0.15%)
+  brokerage_fee_sell: 0.0015      # Sell brokerage fee (0.15%)
+  personal_income_tax_sell: 0.001 # Personal income tax on sell per Circular 92/2015/TT-BTC (0.10%)
+  
+  # Total effective friction:
+  # - Buy side = 0.15%
+  # - Sell side = 0.15% + 0.10% = 0.25%
+
+# 2. Trading Rules & Lot Size Enforcement
+trading_rules:
+  lot_size: 100                   # Lot size 100 shares (Enforces int(shares / 100) * 100)
+  min_order_value: 0              # Minimum order value in VND
+  allow_short_selling: false      # Short selling restriction
+
+# 3. Daily Price Limits per Exchange
+price_limits:
+  HOSE: 0.07                      # Daily limit +/- 7%
+  HNX: 0.10                       # Daily limit +/- 10%
+  UPCoM: 0.15                     # Daily limit +/- 15%
+
+# 4. Systemic Risk Controls
+risk_controls:
+  default_turbulence_threshold: 100.0 # Kritzman turbulence index threshold for risk mitigation
+  force_sell_on_turbulence: true      # Force liquidate / shift to Cash on turbulence breach
