@@ -1,82 +1,75 @@
-# configuration for feature engineering engine
 version: "1.0"
 
 # =====================================================================
-# TECHNICAL AND MACRO ECONOMIC INDICATORS CATALOG
+# 1. TECHNICAL INDICATORS (Lưu vào indicator_types & technical_indicator_values)
 # =====================================================================
-indicators:
-  # -----------------------------------------------------------------
-  # Group 1: Asset-Specific Momentum & Volatility Indicators
-  # -----------------------------------------------------------------
+technical_indicators:
   - name: "RSI"
     category: "trend"
     window_size: 14
-    description: "Relative Strength Index - Momentum indicator identifying overbought/oversold levels"
+    description: "Relative Strength Index"
     enabled: true
 
   - name: "PPO"
     category: "trend"
     window_size: 26
-    description: "Percentage Price Oscillator - Measures momentum acceleration via percentage difference"
+    description: "Percentage Price Oscillator"
     enabled: true
 
   - name: "CCI"
     category: "trend"
     window_size: 20
-    description: "Commodity Channel Index - Measures deviation from typical price"
+    description: "Commodity Channel Index"
     enabled: true
 
   - name: "ADX"
     category: "trend"
     window_size: 14
-    description: "Average Directional Index - Measures overall trend strength"
+    description: "Average Directional Index"
     enabled: true
 
   - name: "ATR"
     category: "volatility"
     window_size: 14
-    description: "Average True Range - Measures market volatility over time"
+    description: "Average True Range"
     enabled: true
 
   - name: "VOLATILITY"
     category: "volatility"
     window_size: 20
-    description: "Rolling Volatility - Standard deviation of log returns"
+    description: "Rolling Volatility"
     enabled: true
 
-  # -----------------------------------------------------------------
-  # Group 2: Macroeconomic Regime Indicators
-  # -----------------------------------------------------------------
+# =====================================================================
+# 2. MACRO INDICATORS (Lưu vào macro_types & macro_values)
+# =====================================================================
+macro_indicators:
   - name: "YIELD_CURVE_SLOPE"
-    category: "macro"
-    window_size: 1
-    description: "Yield Curve Slope - Spread between Vietnam 10-Year and 3-Year Government Bond Yields"
+    unit: "%"
+    description: "Spread between Vietnam 10-Year and 3-Year Government Bond Yields"
     enabled: true
 
   - name: "DXY_LOG_RETURN"
-    category: "macro"
-    window_size: 1
-    description: "US Dollar Index (DXY) Log-Return - Measures foreign capital outflow pressure"
+    unit: "ratio"
+    description: "US Dollar Index (DXY) Log-Return"
     enabled: true
 
   - name: "SJC_PREMIUM"
-    category: "macro"
-    window_size: 1
-    description: "SJC Gold Premium - Difference between domestic SJC and world spot gold price"
+    unit: "ratio"
+    description: "Difference between domestic SJC and world spot gold price"
     enabled: true
 
-  - name: "VNIBOR_ON"
-    category: "macro"
-    window_size: 1
-    description: "Vietnam Interbank Overnight Rate (VNIBOR ON) - Risk-free short rate"
+  - name: "VN3YT"
+    unit: "%"
+    description: "Vietnam 3-Year Government Bond Yield (Risk-Free Rate Proxy)"
     enabled: true
 
 # =====================================================================
 # PIPELINE EXECUTION SETTINGS
 # =====================================================================
 pipeline_settings:
-  target_asset_class_ids: [6, 7, 8]       # Target asset class IDs for feature calculation
-  drop_nan: true                          # Automatically drop initial NaN lookback periods
-  save_mode: "append"                     # DB persistence mode (append / replace)
-  scale_features: false                   # Enable feature scaling for DRL models
+  target_asset_class_ids: [5, 6, 7, 8]
+  drop_nan: true
+  save_mode: "append"
+  scale_features: false
   scaler_path: "models/scalers/standard_scaler.pkl"

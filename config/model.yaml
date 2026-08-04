@@ -1,13 +1,14 @@
 model_engine:
   # Data splitting timelines
-  train_start_date: "2018-06-25"
-  train_end_date: "2020-12-31"
-  val_start_date: "2021-01-01"
-  val_end_date: "2021-12-31"
+  train_start_date: "2018-08-06"
+  train_end_date: "2022-12-31"
+  val_start_date: "2023-01-01"
+  val_end_date: "2023-12-31"
+  test_start_date: "2024-01-01"
+  test_end_date: "2024-12-31"
 
   # Asset selection (Filter by asset class IDs)
-  target_asset_class_ids: [6, 7, 8] # Includes Sector indices (7) and Macro indicators (6, 8)
-
+  target_asset_class_ids: [6, 7, 8] # Includes Sector indices (7), Macro indicators (6, 8), and Gold (5)
 
   # Dynamic Input Features from Database
   features:
@@ -19,16 +20,28 @@ model_engine:
     - "VOLATILITY"
     - "YIELD_CURVE_SLOPE"
     - "DXY_LOG_RETURN"
-    - "VNIBOR_ON"
+    - "VN3YT"
 
-  # Environment constraints
-  transaction_cost_pct: 0.001
+  # Environment Portfolio Settings
   initial_balance: 1000000000 # 1 Billion VND
-  turbulence_threshold: 100 # Arbitrary initial threshold
+  # (Note: Transaction costs & Turbulence threshold are managed in config/market.yaml as Single Source of Truth)
 
   # Rolling Horizon Episode Settings
   episode_length: 60       # 60 trading days (~1 Quarter) or 252 (~1 Year)
   random_start: true       # Random start date in training mode
+
+  # Reward Strategy Configuration
+  reward_settings:
+    reward_type: "net_return" # Options: "net_return", "sortino", "drawdown_penalty"
+    scale_factor: 10.0
+    downside_penalty_coef: 2.0
+    mdd_threshold: 0.05
+    mdd_penalty_coef: 5.0
+
+  # Training Execution Settings
+  training_settings:
+    total_timesteps: 10000   # Timesteps per model training
+    eval_deterministic: true
 
   # Training hyperparameters
   algorithms:

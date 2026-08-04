@@ -15,7 +15,7 @@ def _find_root_dir() -> Path:
     """Searches upward from this file to find the workspace root containing config/."""
     current = Path(__file__).resolve()
     for parent in current.parents:
-        if (parent / "config" / "config.yaml").exists():
+        if (parent / "config" / "api.yaml").exists() or (parent / "config" / "config.yaml").exists():
             return parent
     return current.parent.parent.parent
 
@@ -86,7 +86,7 @@ class GlobalSettings:
     """Centralized settings registry.
 
     Loads:
-        - config.yaml: database, system, APIs
+        - api.yaml / config.yaml: database, system, APIs
         - assets.yaml: asset class definitions
         - features.yaml: indicator definitions and pipeline_settings
         - model.yaml: model engine configurations
@@ -123,7 +123,10 @@ class GlobalSettings:
 
     def load(self) -> None:
         """Loads and parses all configuration files."""
-        config_data = self._load_yaml(self.config_dir / "config.yaml")
+        main_config_path = self.config_dir / "api.yaml"
+        if not main_config_path.exists():
+            main_config_path = self.config_dir / "config.yaml"
+        config_data = self._load_yaml(main_config_path)
         assets_data = self._load_yaml(self.config_dir / "assets.yaml")
         features_data = self._load_yaml(self.config_dir / "features.yaml", optional=True)
         model_data = self._load_yaml(self.config_dir / "model.yaml", optional=True)
@@ -140,8 +143,17 @@ class GlobalSettings:
         self.macro_indices = ConfigNode(merged.get("macro_indices", {}))
 
         # Feature-specific settings
-        self.indicators: List[Dict[str, Any]] = features_data.get("indicators", [])
+        raw_tech = features_data.get("technical_indicators", [])
+        raw_macro = features_data.get("macro_indicators", [])
+        for item in raw_tech:
+            if "category" not in item:
+                item["category"] = "trend"
+        for item in raw_macro:
+            item["category"] = "macro"
+
+        self.indicators: List[Dict[str, Any]] = features_data.get("indicators", raw_tech + raw_macro)
         self.pipeline_settings = ConfigNode(features_data.get("pipeline_settings", {}))
+
 
         # Model-specific settings
         self.model_engine = ConfigNode(model_data.get("model_engine", {}))
@@ -149,9 +161,9 @@ class GlobalSettings:
         # Market microstructure settings
         self.market = ConfigNode(market_data)
 
-    def get_enabled_indicators(self) -> List[Dict[str, Any]]:
-        """Returns only indicators where enabled is True."""
-        return [ind for ind in self.indicators if ind.get("enabled", False)]
+    def reload(self) -> None:
+        """Reloads configuration files from disk."""
+        self.load()
 
 
 # Global settings singleton
@@ -160,3 +172,16 @@ settings = GlobalSettings()
 # Maintain backward compatibility for MODEL_CONFIG and MARKET_CONFIG
 MODEL_CONFIG = settings.model_engine.to_dict() if settings.model_engine else {}
 MARKET_CONFIG = settings.market.to_dict() if settings.market else {}
+
+
+def reload_settings() -> GlobalSettings:
+    """Reloads all YAML settings from disk and updates MODEL_CONFIG and MARKET_CONFIG in-place."""
+    global settings
+    settings.load()
+    if settings.model_engine:
+        MODEL_CONFIG.clear()
+        MODEL_CONFIG.update(settings.model_engine.to_dict())
+    if settings.market:
+        MARKET_CONFIG.clear()
+        MARKET_CONFIG.update(settings.market.to_dict())
+    return settings

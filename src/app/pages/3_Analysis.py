@@ -82,16 +82,12 @@ if not has_analysis():
                 c for c in val_data.columns
                 if c not in ["tic", "date", "open", "high", "low", "close", "volume"]
             ]
+            turb_threshold = MARKET_CONFIG.get("risk_controls", {}).get("default_turbulence_threshold", 100.0)
 
             env_kwargs = {
-                "initial_balance": MODEL_CONFIG.get("initial_balance", 1_000_000_000),
-                "buy_cost_pct":    MARKET_CONFIG.get("transaction_costs", {}).get("brokerage_fee_buy", 0.0015),
-                "sell_cost_pct":   (
-                    MARKET_CONFIG.get("transaction_costs", {}).get("brokerage_fee_sell", 0.0015)
-                    + MARKET_CONFIG.get("transaction_costs", {}).get("personal_income_tax_sell", 0.001)
-                ),
-                "lot_size":        MARKET_CONFIG.get("trading_rules", {}).get("lot_size", 100),
-                "feature_names":   feature_cols,
+                "features":             feature_cols,
+                "initial_balance":      MODEL_CONFIG.get("initial_balance", 1_000_000_000),
+                "turbulence_threshold": turb_threshold,
             }
 
             strategy = DRLEnsembleStrategy(
@@ -159,7 +155,6 @@ with st.expander("🖼️ Xem bản Matplotlib (chất lượng cao)"):
         from model_engine.analysis.visualization import ModelVisualizer
         viz = ModelVisualizer()
         import matplotlib
-        matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
 

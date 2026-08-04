@@ -91,7 +91,7 @@ if load_btn:
 
         except Exception as e:
             st.error(f"❌ Lỗi kết nối database:\n\n```\n{e}\n```")
-            st.info("💡 Kiểm tra cấu hình tại `config/config.yaml` và đảm bảo MySQL đang chạy.")
+            st.info("💡 Kiểm tra cấu hình tại `config/api.yaml` và đảm bảo MySQL đang chạy.")
             st.stop()
 
 # ─── Display if Data is Loaded ───────────────────────────────────────────────

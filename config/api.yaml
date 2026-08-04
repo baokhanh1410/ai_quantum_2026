@@ -45,7 +45,7 @@ apis:
     url: "https://sbv.gov.vn/o/headless-delivery/v1.0/content-structures/3450260/structured-contents"
     method: "GET"
     headers:
-      User-Agent: "${USER_AGENT}"
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
       Referer: "https://sbv.gov.vn/"
       Accept: "application/json, text/plain, */*"
     default_params:

@@ -1,10 +1,11 @@
-# market.yaml - Microstructure Configuration for Vietnam Stock Market
+# market.yaml - Microstructure Configuration for Vietnam Stock Market & Asset Classes
+
 market_settings:
-  market_name: "Vietnam Stock Market (HOSE/HNX/UPCoM)"
+  market_name: "Vietnam Stock Market"
   currency: "VND"
   trading_days_per_year: 252
 
-# 1. Transaction Costs & Tax Schedules
+# 1. Transaction Costs & Tax Schedules (General Fallback)
 transaction_costs:
   brokerage_fee_buy: 0.0015       # Buy brokerage fee (0.15%)
   brokerage_fee_sell: 0.0015      # Sell brokerage fee (0.15%)
@@ -30,3 +31,55 @@ price_limits:
 risk_controls:
   default_turbulence_threshold: 100.0 # Kritzman turbulence index threshold for risk mitigation
   force_sell_on_turbulence: true      # Force liquidate / shift to Cash on turbulence breach
+
+# 5. Asset Class Specific Microstructure & Execution Rules
+asset_class_rules:
+  # --- TÀI SẢN TẤN CÔNG: CỔ PHIẾU (HOSE, HNX, UPCoM) ---
+  STOCK:
+    asset_class_id: 1
+    description: "Equities / Listed Stocks & Stock ETFs"
+    locked_days_buy: 2           # Chu kỳ thanh toán T+2 (mua ngày t -> khả dụng ngày t+2)
+    locked_days_sell: 0           # Tiền bán về T+2 nhưng có thể ứng trước tiền bán
+    lot_size: 100                # Quy tắc lô chẵn 100 cổ phiếu
+    buy_fee_pct: 0.0015          # Phí mua 0.15% (phí môi giới)
+    sell_fee_pct: 0.0025         # Phí bán 0.25% (0.15% phí môi giới + 0.10% thuế TNCN)
+    price_limit_ratio:
+      HOSE: 0.07                 # Biên độ +/- 7%
+      HNX: 0.10                  # Biên độ +/- 10%
+      UPCoM: 0.15                # Biên độ +/- 15%
+
+  # --- TÀI SẢN PHÒNG THỦ: CHỨNG CHỈ QUỸ TRÁI PHIẾU (BOND FUND) ---
+  BOND_FUND:
+    asset_class_id: 4
+    description: "Bond Fund Certificates (Open-ended funds like TCBF, VBF)"
+    locked_days_buy: 0           # Mua lệnh mở T+0
+    locked_days_sell: 3          # Tiền rút vốn từ Quỹ trái phiếu mất 3 ngày làm việc mới về tài khoản
+    min_order_value: 100000      # Giá trị đặt lệnh tối thiểu 100.000 VNĐ
+    buy_fee_pct: 0.0000          # Miễn phí mua
+    tiered_exit_fee:             # Biểu phí bán giảm dần theo thời gian nắm giữ
+      under_30_days: 0.010       # Nắm giữ < 30 ngày: Phạt phí bán 1.0%
+      under_180_days: 0.005      # Nắm giữ 30 - 180 ngày: Phí bán 0.5%
+      under_365_days: 0.002      # Nắm giữ 180 - 365 ngày: Phí bán 0.2%
+      over_365_days: 0.000       # Nắm giữ > 1 năm: Miễn phí bán (0%)
+
+  # --- TÀI SẢN PHÒNG THỦ: VÀNG VẬT CHẤT & DIGITAL GOLD (SJC / eGold / XAUUSD) ---
+  GOLD:
+    asset_class_id: 5
+    description: "Physical Gold SJC & Digital Gold Accumulation (eGold)"
+    locked_days_buy: 0           # T+0 Tức thì nếu giao dịch Vàng số (DOJI eGold / TPBank)
+    locked_days_sell: 0
+    bid_ask_spread_pct: 0.020    # Chênh lệch giá Mua - Bán (Bid-Ask Spread ~2.0% tương đương 1.5 - 2M VNĐ/lượng)
+    lot_size_unit: "1_CHI"       # Đơn vị lô chẵn 1 chỉ (~3.75g, ~8.7 triệu VNĐ)
+    friction_penalty_weight: 0.20 # Phạt vòng quay vốn nặng trong Reward để hạn chế lướt sóng ngắn hạn
+    sjc_premium_warning_threshold: 0.15 # Cảnh báo khi giá Vàng SJC cao hơn thế giới > 15%
+
+  # --- TIỀN MẶT & TƯƠNG ĐƯƠNG TIỀN (CASH & MONEY MARKET) ---
+  CASH:
+    asset_class_id: 6
+    description: "Cash Balance & Overnight Interbank Interest / Money Market"
+    locked_days_buy: 0           # T+0 Khả dụng ngay lập tức
+    locked_days_sell: 0
+    buy_fee_pct: 0.0000          # Miễn phí
+    sell_fee_pct: 0.0000
+    interest_rate_feature: "VNIBOR_ON" # Lãi suất gửi tích lũy qua đêm liên ngân hàng
+    min_cash_buffer_pct: 0.05    # Đệm tiền mặt tối thiểu 5% bảo vệ thanh khoản danh mục

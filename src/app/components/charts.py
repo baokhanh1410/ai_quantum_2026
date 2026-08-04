@@ -176,15 +176,18 @@ def plot_nav_plotly(
     if df_benchmark is not None and not df_benchmark.empty:
         bm_col = "account_value" if "account_value" in df_benchmark.columns else "close"
         df_bm = df_benchmark.copy()
-        df_bm["date"] = pd.to_datetime(df_bm["date"])
-        # Align benchmark to agent dates
+        
+        # Standardize date format for clean inner/left merge
+        df_a_dates = pd.DataFrame({"date": pd.to_datetime(df_a["date"]).dt.strftime("%Y-%m-%d")})
+        df_bm["date_str"] = pd.to_datetime(df_bm["date"]).dt.strftime("%Y-%m-%d")
+
         merged = pd.merge(
-            df_a[["date"]], df_bm[["date", bm_col]],
+            df_a_dates, df_bm[["date_str", bm_col]].rename(columns={"date_str": "date"}),
             on="date", how="left"
         ).ffill().bfill()
 
         bm_vals = merged[bm_col].values
-        if len(bm_vals) > 0 and bm_vals[0] > 0:
+        if len(bm_vals) > 0 and not np.isnan(bm_vals[0]) and bm_vals[0] > 0:
             nav_bm = (bm_vals / bm_vals[0] - 1.0) * 100.0
             fig.add_trace(go.Scatter(
                 x=df_a["date"], y=nav_bm,

@@ -3,7 +3,7 @@
 # Maps ICB sector standards from Vnstock to HOSE Sector Indices (VNDirect)
 # ==============================================================================
 
-# List of available sector index tickers in the system (from config.yaml):
+# List of available sector index tickers in the system (from api.yaml):
 # - VNFIN: Financials (Banking, Brokerage, Insurance)
 # - VNREAL: Real Estate
 # - VNMAT: Basic Materials (Steel, Chemicals, Rubber)

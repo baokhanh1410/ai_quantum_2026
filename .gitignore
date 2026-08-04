@@ -73,4 +73,8 @@ data/reports/*.png
 data/reports/*.csv
 data/raw/*
 !data/raw/.gitkeep
+data
 
+#
+.*
+!.gitignore

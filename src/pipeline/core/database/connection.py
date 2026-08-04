@@ -57,19 +57,25 @@ def get_mysql_session():
         session.close()
 
 
-def get_duckdb_connection():
+def get_duckdb_connection(read_only: bool = False):
     """Creates and returns a connection to the local DuckDB database.
+
+    Args:
+        read_only: If True, opens connection in read-only mode for multi-process concurrency.
 
     Returns:
         A DuckDB Connection object.
     """
     try:
-        db_path = settings.database.duckdb.path
-        # Ensure directories exist
+        db_path = str(settings.database.duckdb.path)
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        # Connect to DuckDB
-        conn = duckdb.connect(db_path)
-        return conn
+        return duckdb.connect(db_path, read_only=read_only)
     except Exception as e:
+        if not read_only:
+            try:
+                logger.warning(f"DuckDB write connection failed ({e}), trying read-only mode...")
+                return duckdb.connect(db_path, read_only=True)
+            except Exception:
+                pass
         logger.error(f"Failed to connect to DuckDB: {e}")
         raise DatabaseError(f"DuckDB connection error: {e}") from e

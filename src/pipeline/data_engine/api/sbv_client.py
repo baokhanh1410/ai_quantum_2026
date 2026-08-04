@@ -18,7 +18,10 @@ class SBVClient(BaseAPIClient):
             headers_dict = headers.to_dict()
         else:
             headers_dict = dict(headers)
-            
+
+        if not headers_dict.get("User-Agent") or "${" in str(headers_dict.get("User-Agent")):
+            headers_dict["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+
         super().__init__(default_headers=headers_dict)
         self.url = sbv_config.url
         self.default_params = sbv_config.get("default_params", {})

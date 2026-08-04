@@ -57,9 +57,6 @@ class MetricsAnalyzer:
         if years <= 0:
             return 0.0
         return float(total_return ** (1.0 / years) - 1.0)
-        if years <= 0:
-            return 0.0
-        return (total_return ** (1.0 / years)) - 1.0
 
     def compute_annualized_volatility(self, df_account: pd.DataFrame) -> float:
         """Calculates annualized volatility of daily returns."""
@@ -80,7 +77,8 @@ class MetricsAnalyzer:
         returns = self.compute_returns(df_account)
         downside_returns = returns[returns < 0]
         if len(downside_returns) == 0:
-            return float("inf") if ann_return > self.risk_free_rate else 0.0
+            # Trả về giá trị hữu hạn (không dùng inf để tránh lỗi JSON/display)
+            return min((ann_return - self.risk_free_rate) / 1e-8, 999.0) if ann_return > self.risk_free_rate else 0.0
         ann_downside_vol = float(downside_returns.std() * np.sqrt(self.trading_days))
         if ann_downside_vol == 0 or np.isnan(ann_downside_vol):
             return 0.0
@@ -193,3 +191,11 @@ class MetricsAnalyzer:
             }
 
         return metrics
+
+    def calculate_all(
+        self,
+        df_account: pd.DataFrame,
+        benchmark_account: Optional[pd.DataFrame] = None
+    ) -> Dict[str, Any]:
+        """Alias của compute_all_metrics() — tương thích ngược với Streamlit 3_Analysis.py."""
+        return self.compute_all_metrics(df_account, benchmark_account)

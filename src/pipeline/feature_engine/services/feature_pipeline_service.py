@@ -192,9 +192,9 @@ class FeaturePipelineService:
         ticker_id_map = self.mysql_repo.fetch_ticker_id_map()
         records: List[Dict[str, Any]] = []
 
-        # ----- Asset-level indicators -----
+        # ----- Asset-level technical indicators -----
         asset_indicators = [
-            ind for ind in indicators if ind.get("category") in ("trend", "volatility")
+            ind for ind in indicators if ind.get("category") != "macro"
         ]
         for ind_cfg in asset_indicators:
             name = ind_cfg["name"]
@@ -229,51 +229,39 @@ class FeaturePipelineService:
                         "value": float(val) if val is not None and not np.isnan(val) else None,
                     })
 
+        total_inserted = 0
+        if records:
+            total_inserted += self.mysql_repo.bulk_insert_indicator_values(records)
+
         # ----- Macro indicators -----
+        macro_records: List[Dict[str, Any]] = []
         macro_indicators = [ind for ind in indicators if ind.get("category") == "macro"]
         for ind_cfg in macro_indicators:
             name = ind_cfg["name"]
-            window = ind_cfg.get("window_size", 1)
 
-            indicator_type_id = self.mysql_repo.upsert_indicator_type(
+            macro_type_id = self.mysql_repo.upsert_macro_type(
                 name=name,
-                category="macro",
-                window_size=window,
+                unit=ind_cfg.get("unit", ""),
                 description=ind_cfg.get("description", ""),
             )
 
             if name not in macro_df.columns:
                 continue
 
-            # Macro indicators are stored against a virtual "macro" ticker.
-            # Use the first available macro-related ticker or create a placeholder.
-            macro_ticker_id = ticker_id_map.get(name)
-            if macro_ticker_id is None:
-                # Fall back: use any macro ticker as the carrier
-                for sym_candidate in ["DXY", "XAUUSD", "VNIBOR_ON", "VN10YT"]:
-                    if sym_candidate in ticker_id_map:
-                        macro_ticker_id = ticker_id_map[sym_candidate]
-                        break
-
-            if macro_ticker_id is None:
-                logger.warning(f"No suitable ticker ID for macro indicator '{name}', skipping.")
-                continue
-
             for ts, val in macro_df[name].items():
                 if drop_nan and (val is None or (isinstance(val, float) and np.isnan(val))):
                     continue
-                records.append({
-                    "ticker_id": macro_ticker_id,
-                    "indicator_type_id": indicator_type_id,
-                    "timestamp": ts,
+                macro_records.append({
+                    "macro_type_id": macro_type_id,
+                    "timestamp": ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10],
                     "value": float(val) if val is not None and not np.isnan(val) else None,
                 })
 
-        # Bulk insert
-        if records:
-            total = self.mysql_repo.bulk_insert_indicator_values(records)
-            return total
-        return 0
+        if macro_records:
+            total_inserted += self.mysql_repo.bulk_insert_macro_values(macro_records)
+
+        return total_inserted
+
 
     def _export_parquet(
         self,

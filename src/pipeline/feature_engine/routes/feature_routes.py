@@ -35,7 +35,7 @@ def compute_features(payload: Optional[FeatureComputeRequest] = None) -> Dict[st
     """Triggers the full feature engineering pipeline.
 
     Accepts optional start_date and end_date parameters. If omitted,
-    dates fall back to config.yaml system settings or today.
+    dates fall back to api.yaml system settings or today.
 
     Returns:
         Summary JSON with status, total records, and metadata.

@@ -260,6 +260,8 @@ class CalculatorProcessor:
             return self._sjc_premium(symbol_data, master_timeline)
         elif name == "VNIBOR_ON":
             return self._vnibor_on_passthrough(symbol_data, master_timeline)
+        elif name == "VN3YT":
+            return self._safe_close(symbol_data, "VN3YT", master_timeline)
         else:
             raise FeatureCalculationError(
                 f"Unknown macro indicator '{name}'. "
@@ -303,7 +305,7 @@ class CalculatorProcessor:
         XAUUSD is USD/oz.  USDVND is VND/USD.
         World gold in VND per tael = XAUUSD * USDVND / 0.829
         """
-        sjc_buy = self._safe_close(symbol_data, "SJC_BUY_SELL", timeline)
+        sjc_buy = self._safe_close(symbol_data, "SJC_BUY", timeline)
         xauusd = self._safe_close(symbol_data, "XAUUSD", timeline)
         usdvnd = self._safe_close(symbol_data, "USDVND", timeline)
 
@@ -321,7 +323,7 @@ class CalculatorProcessor:
     ) -> pd.Series:
         """Passes through the VNIBOR ON daily rate."""
         return self._safe_close(symbol_data, "VNIBOR_ON", timeline)
-
+    
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------

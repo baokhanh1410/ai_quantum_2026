@@ -1,6 +1,7 @@
 import pandas as pd
+import numpy as np
 import logging
-from typing import List
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -14,17 +15,38 @@ class DataProcessor:
         self.data = data
         self.features = features
         
-    def clean_data(self) -> pd.DataFrame:
+    def clean_data(self, start_date: Optional[str] = None) -> pd.DataFrame:
         """
-        Cleans data by filling missing values and broadcasting macro features.
+        Cleans data by filling missing values, fixing zero OHLC prices, and broadcasting macro features.
+        If start_date is specified, trims history prior to start_date after normalization.
         """
         if self.data.empty:
             return self.data
             
         df = self.data.copy()
-        
+
+        # 0. Fix zero prices in OHLC columns by replacing with NaN and backfilling/forward-filling
+        ohlc_cols = [c for c in ['open', 'high', 'low', 'close'] if c in df.columns]
+        for col in ohlc_cols:
+            df[col] = df[col].replace(0, np.nan)
+            
+        if 'close' in df.columns:
+            df['close'] = df.groupby('tic')['close'].transform(lambda s: s.ffill().bfill())
+            if 'open' in df.columns:
+                df['open'] = df['open'].fillna(df['close'])
+            if 'high' in df.columns:
+                df['high'] = df['high'].fillna(df['close'])
+            if 'low' in df.columns:
+                df['low'] = df['low'].fillna(df['close'])
+
+        if 'high' in df.columns and 'low' in df.columns and 'close' in df.columns:
+            same_mask = (df['high'] == df['low']) | df['high'].isna() | df['low'].isna()
+            df.loc[same_mask, 'high'] = df.loc[same_mask, 'close'] * 1.0001
+            df.loc[same_mask, 'low'] = df.loc[same_mask, 'close'] * 0.9999
+
         # 1. Identify and broadcast macro features
-        MACRO_PREFIXES = ("DXY", "VN10YT", "VN3YT", "USDVND", "VNIBOR", "SJC", "XAUUSD")
+        # Gold (SJC) is kept as a tradable asset in tradable_df
+        MACRO_PREFIXES = ("DXY", "VN10YT", "VN3YT", "USDVND", "SJC_BUY", "VNIBOR", "XAUUSD")
         is_macro = df['tic'].str.startswith(MACRO_PREFIXES)
         
         macro_df = df[is_macro]
@@ -47,25 +69,72 @@ class DataProcessor:
             # Merge macro features into tradable assets
             tradable_df = pd.merge(tradable_df, macro_agg, on='date', how='left')
             
+        # Scale Gold price from VND to a 1,000-point Price Index to match Sector Indices (~1,000-2,000 points)
+        if 'SJC_SELL' in tradable_df['tic'].values:
+            sjc_mask = tradable_df['tic'] == 'SJC_SELL'
+            price_cols = [c for c in ['open', 'high', 'low', 'close'] if c in tradable_df.columns]
+            sjc_sub = tradable_df[sjc_mask].sort_values('date')
+            if not sjc_sub.empty and 'close' in sjc_sub.columns:
+                first_close = sjc_sub['close'].iloc[0]
+                if first_close > 0:
+                    tradable_df.loc[sjc_mask, price_cols] = (tradable_df.loc[sjc_mask, price_cols] / first_close) * 1000.0
+
         df = tradable_df
         
         if df.empty:
             return df
             
-        # 2. Fill missing values per tradable ticker
+        # 2. Fill missing values per tradable ticker — forward fill ONLY (no bfill to prevent future leakage)
         df = df.sort_values(['date', 'tic'])
-        df = df.groupby('tic').apply(lambda x: x.ffill().bfill()).reset_index(drop=True)
-        
-        # Fill any remaining NaNs with 0 (e.g. if an indicator is completely missing)
+        df = df.groupby('tic', group_keys=False).apply(lambda x: x.ffill()).reset_index(drop=True)
+
+        # 3. Clean initial 0 values (lookback warm-up period) in technical indicators by forward-filling per ticker
+        #    NOTE: We use ffill here (not bfill) to avoid any future leakage. Values at the very start (no history)
+        #          remain 0 and are handled by the fillna(0) step below.
+        tech_cols = [c for c in ['ADX', 'ATR', 'RSI', 'PPO', 'CCI', 'VOLATILITY', 'YIELD_CURVE_SLOPE', 'DXY_LOG_RETURN', 'VN3YT'] if c in df.columns]
+        for col in tech_cols:
+            df[col] = df.groupby('tic')[col].transform(lambda s: s.replace(0, np.nan).ffill())
+
+        # Fill any remaining NaNs with 0 (e.g. if an indicator is completely missing at start)
         df = df.fillna(0)
+
+        # 3b. Rolling Z-Score Normalization for technical & macro features (per-ticker, window=30, clip=±3.0)
+        #     Prevents State Drift caused by features with incompatible scales.
+        #     Uses expanding window for initial warmup (< 30) and rolling window for win >= 30.
+        ZSCORE_WINDOW = 30
+        ZSCORE_CLIP = 3.0
+        for col in tech_cols:
+            if col in df.columns:
+                def _zscore_normalize(s: pd.Series, win: int = ZSCORE_WINDOW, clip: float = ZSCORE_CLIP) -> pd.Series:
+                    exp_mean = s.expanding(min_periods=1).mean()
+                    exp_std = s.expanding(min_periods=1).std().fillna(1.0).replace(0, 1.0)
+                    roll_mean = s.rolling(window=win, min_periods=1).mean()
+                    roll_std = s.rolling(window=win, min_periods=1).std().fillna(1.0).replace(0, 1.0)
+                    
+                    n = len(s)
+                    idx = np.arange(n)
+                    mean = np.where(idx < win, exp_mean, roll_mean)
+                    std = np.where(idx < win, exp_std, roll_std)
+                    
+                    z = (s - mean) / (std + 1e-8)
+                    return pd.Series(z.clip(-clip, clip), index=s.index).fillna(0.0)
+                df[col] = df.groupby('tic')[col].transform(_zscore_normalize)
         
-        # 3. Ensure all required features exist
+        # 4. Ensure all required features exist
         for feat in self.features:
             if feat not in df.columns:
                 logger.warning(f"Feature {feat} not found in database. Filling with 0.")
                 df[feat] = 0
                 
+        # 5. Keep ONLY OHLCV columns + configured features to avoid leaking unwanted macro/tech columns
+        keep_cols = [c for c in ['tic', 'date', 'open', 'high', 'low', 'close', 'volume'] + list(self.features) if c in df.columns]
+        df = df[keep_cols]
+
         # Re-sort to be strictly chronological for the environment
         df = df.sort_values(['date', 'tic']).reset_index(drop=True)
+
+        # Filter out warm-up historical rows prior to start_date if provided
+        if start_date is not None:
+            df = df[df['date'] >= start_date].reset_index(drop=True)
         
         return df

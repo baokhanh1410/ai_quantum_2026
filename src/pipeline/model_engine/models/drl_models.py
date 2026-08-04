@@ -1,19 +1,27 @@
 import logging
 import numpy as np
 import pandas as pd
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
 from stable_baselines3 import A2C, DDPG, PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
-from core.config.settings import MODEL_CONFIG
+from stable_baselines3.common.logger import configure as sb3_configure
+from core.config.settings import MODEL_CONFIG, ROOT_DIR
 
 logger = logging.getLogger(__name__)
 
+# Đường dẫn lưu checkpoint mô hình (tư động tạo nếu chưa tồn tại)
+MODELS_DIR = Path(ROOT_DIR) / "data" / "models"
+
 class DRLEnsembleStrategy:
-    def __init__(self, env_train_class, env_kwargs, train_data, val_data):
+    def __init__(self, env_train_class, env_kwargs, train_data, val_data, total_timesteps: Optional[int] = None):
         self.env_train_class = env_train_class
         self.env_kwargs = env_kwargs
         self.train_data = train_data
         self.val_data = val_data
         self.config = MODEL_CONFIG.get("algorithms", {})
+        self._total_timesteps = total_timesteps
         
     def _make_env(self, data, is_eval: bool = False):
         kwargs = self.env_kwargs.copy()
@@ -29,38 +37,61 @@ class DRLEnsembleStrategy:
         env = self.env_train_class(**kwargs)
         return DummyVecEnv([lambda: env])
 
+    @property
+    def total_timesteps(self) -> int:
+        if self._total_timesteps is not None:
+            return int(self._total_timesteps)
+        training_settings = MODEL_CONFIG.get("training_settings", {})
+        # Lấy từ config, default 20000 (không hard-code 50000)
+        return int(training_settings.get("total_timesteps", 20000))
+
+    def _save_checkpoint(self, model, algo_name: str) -> str:
+        """Lưu mô hình vào disk sau khi train. Tự động tạo thư mục nếu chưa tồn tại."""
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_path = MODELS_DIR / f"{algo_name}_{timestamp}"
+        model.save(str(save_path))
+        logger.info(f"[Checkpoint] Đã lưu mô hình {algo_name} tại: {save_path}.zip")
+        return str(save_path)
+
     def train_a2c(self):
         env_train = self._make_env(self.train_data, is_eval=False)
-        logger.info("Training A2C...")
+        logger.info(f"Training A2C ({self.total_timesteps} timesteps)...")
         model = A2C('MlpPolicy', env_train, 
                     learning_rate=self.config.get("a2c", {}).get("learning_rate", 0.0007),
                     n_steps=self.config.get("a2c", {}).get("n_steps", 5),
                     ent_coef=self.config.get("a2c", {}).get("ent_coef", 0.01),
-                    verbose=0)
-        model.learn(total_timesteps=10000) # Arbitrary timesteps for POC
+                    verbose=0,
+                    tensorboard_log=str(MODELS_DIR / "tb_logs" / "A2C"))
+        model.learn(total_timesteps=self.total_timesteps)
+        self._save_checkpoint(model, "A2C")
         return model
 
     def train_ppo(self):
         env_train = self._make_env(self.train_data, is_eval=False)
-        logger.info("Training PPO...")
+        logger.info(f"Training PPO ({self.total_timesteps} timesteps)...")
         model = PPO('MlpPolicy', env_train, 
                     learning_rate=self.config.get("ppo", {}).get("learning_rate", 0.00025),
                     n_steps=self.config.get("ppo", {}).get("n_steps", 2048),
                     batch_size=self.config.get("ppo", {}).get("batch_size", 64),
                     ent_coef=self.config.get("ppo", {}).get("ent_coef", 0.01),
-                    verbose=0)
-        model.learn(total_timesteps=10000)
+                    verbose=0,
+                    tensorboard_log=str(MODELS_DIR / "tb_logs" / "PPO"))
+        model.learn(total_timesteps=self.total_timesteps)
+        self._save_checkpoint(model, "PPO")
         return model
 
     def train_ddpg(self):
         env_train = self._make_env(self.train_data, is_eval=False)
-        logger.info("Training DDPG...")
+        logger.info(f"Training DDPG ({self.total_timesteps} timesteps)...")
         model = DDPG('MlpPolicy', env_train, 
                      learning_rate=self.config.get("ddpg", {}).get("learning_rate", 0.001),
                      batch_size=self.config.get("ddpg", {}).get("batch_size", 128),
                      buffer_size=self.config.get("ddpg", {}).get("buffer_size", 50000),
-                     verbose=0)
-        model.learn(total_timesteps=10000)
+                     verbose=0,
+                     tensorboard_log=str(MODELS_DIR / "tb_logs" / "DDPG"))
+        model.learn(total_timesteps=self.total_timesteps)
+        self._save_checkpoint(model, "DDPG")
         return model
 
     def evaluate_and_get_trajectory(self, model, data):
@@ -122,18 +153,26 @@ class DRLEnsembleStrategy:
 
     def _evaluate_model(self, model, data):
         """Returns Sharpe Ratio on given data"""
+        if model is None:
+            return -float('inf')
         df_account, _, _ = self.evaluate_and_get_trajectory(model, data)
-        returns = df_account['daily_return']
-        if returns.std() != 0:
-            sharpe = (252 ** 0.5) * returns.mean() / returns.std()
+        returns = df_account['daily_return'].dropna()
+        std = returns.std()
+        if not np.isnan(std) and std > 1e-8:
+            sharpe = (252 ** 0.5) * returns.mean() / std
+            if np.isnan(sharpe) or np.isinf(sharpe):
+                sharpe = 0.0
         else:
             sharpe = 0.0
-        return sharpe
+        return float(sharpe)
 
-    def train_and_select(self):
+    def train_and_select(self, total_timesteps: Optional[int] = None):
         """
         Trains all 3 models and selects the best one based on validation Sharpe Ratio.
         """
+        if total_timesteps is not None:
+            self._total_timesteps = total_timesteps
+
         models = {
             "A2C": self.train_a2c(),
             "PPO": self.train_ppo(),

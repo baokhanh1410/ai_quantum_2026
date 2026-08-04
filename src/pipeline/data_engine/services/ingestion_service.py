@@ -152,25 +152,31 @@ class IngestionService:
 
         # 1. Ingest SBV Interbank rates
         try:
-            # We crawl pages until we hit records before start_date
+            import time
             sbv_records = []
             page = 1
             should_stop = False
-            while not should_stop:
-                data = self.sbv_client.fetch_rates(page=page, page_size=100)
-                parsed = self.sbv_handler.format_data(data)
-                if not parsed:
+            max_pages = 30  # Safety cap on historical pages
+            while not should_stop and page <= max_pages:
+                try:
+                    data = self.sbv_client.fetch_rates(page=page, page_size=100)
+                    parsed = self.sbv_handler.format_data(data)
+                    if not parsed:
+                        break
+                    
+                    # Check if we should stop paging (records sorted descending)
+                    min_dt = min(r["timestamp"] for r in parsed)
+                    if min_dt < start_dt:
+                        should_stop = True
+                        # Keep only those within range
+                        parsed = [r for r in parsed if r["timestamp"] >= start_dt]
+                    
+                    sbv_records.extend(parsed)
+                    page += 1
+                    time.sleep(0.5)  # Rate limiting delay to avoid SBV firewall 403 blocks
+                except Exception as req_err:
+                    logger.warning(f"SBV ingestion completed/stopped at page {page}: {req_err}")
                     break
-                
-                # Check if we should stop paging (records sorted descending)
-                min_dt = min(r["timestamp"] for r in parsed)
-                if min_dt < start_dt:
-                    should_stop = True
-                    # Keep only those within range
-                    parsed = [r for r in parsed if r["timestamp"] >= start_dt]
-                
-                sbv_records.extend(parsed)
-                page += 1
                 
             saved = self._run_pipeline(sbv_records, "sbv_crawler")
             results["SBV_rates"] = saved

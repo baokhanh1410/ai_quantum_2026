@@ -44,6 +44,22 @@ with st.sidebar:
         key="train_algo",
     )
 
+    try:
+        from core.config.settings import MODEL_CONFIG
+        default_timesteps = MODEL_CONFIG.get("training_settings", {}).get("total_timesteps", 20000)
+    except Exception:
+        default_timesteps = 20000
+
+    timesteps = st.number_input(
+        "Total Timesteps",
+        min_value=1000,
+        max_value=500000,
+        value=int(default_timesteps),
+        step=5000,
+        help="Tổng số bước thời gian (timesteps) để huấn luyện mô hình DRL",
+        key="train_timesteps",
+    )
+
     ep_len = st.number_input(
         "Episode Length (Trading Days)",
         min_value=20,
@@ -107,29 +123,26 @@ st.divider()
 
 # ─── Train ─────────────────────────────────────────────────────────────────
 if train_btn:
+    clear_model_state()
     with st.spinner(f"⏳ Đang huấn luyện {algo}... (timesteps={timesteps:,}, ep_length={ep_len}) — vui lòng đợi"):
         try:
             from model_engine.env.stock_trading_env import StockTradingEnv
             from model_engine.models.drl_models import DRLEnsembleStrategy
             from core.config.settings import MODEL_CONFIG, MARKET_CONFIG
 
-            # Build env_kwargs consistent with notebook.py
+            # Build env_kwargs — đọc turbulence_threshold từ MARKET_CONFIG (Single Source of Truth)
             feature_cols = [
                 c for c in train_data.columns
                 if c not in ["tic", "date", "open", "high", "low", "close", "volume"]
             ]
+            turb_threshold = MARKET_CONFIG.get("risk_controls", {}).get("default_turbulence_threshold", 100.0)
 
             env_kwargs = {
-                "initial_balance": MODEL_CONFIG.get("initial_balance", 1_000_000_000),
-                "buy_cost_pct":    MARKET_CONFIG.get("transaction_costs", {}).get("brokerage_fee_buy", 0.0015),
-                "sell_cost_pct":   (
-                    MARKET_CONFIG.get("transaction_costs", {}).get("brokerage_fee_sell", 0.0015)
-                    + MARKET_CONFIG.get("transaction_costs", {}).get("personal_income_tax_sell", 0.001)
-                ),
-                "lot_size":        MARKET_CONFIG.get("trading_rules", {}).get("lot_size", 100),
-                "feature_names":   feature_cols,
-                "episode_length":  ep_len,
-                "random_start":    True,
+                "features":             feature_cols,
+                "initial_balance":      MODEL_CONFIG.get("initial_balance", 1_000_000_000),
+                "turbulence_threshold": turb_threshold,
+                "episode_length":       ep_len,
+                "random_start":         True,
             }
 
             strategy = DRLEnsembleStrategy(
@@ -137,61 +150,24 @@ if train_btn:
                 env_kwargs=env_kwargs,
                 train_data=train_data,
                 val_data=val_data,
+                total_timesteps=timesteps,
             )
 
-            # Override timesteps in config temporarily
-            import stable_baselines3 as sb3
-
+            # Gọi trực tiếp DRLEnsembleStrategy methods để đảm bảo checkpoint & TensorBoard được lưu
             if algo == "A2C":
-                from stable_baselines3 import A2C
-                from stable_baselines3.common.vec_env import DummyVecEnv
-                env = strategy._make_env(train_data, is_eval=False)
-                from core.config.settings import MODEL_CONFIG as MC
-                model = A2C(
-                    "MlpPolicy", env,
-                    learning_rate=MC.get("algorithms", {}).get("a2c", {}).get("learning_rate", 0.0007),
-                    n_steps=MC.get("algorithms", {}).get("a2c", {}).get("n_steps", 5),
-                    ent_coef=MC.get("algorithms", {}).get("a2c", {}).get("ent_coef", 0.01),
-                    verbose=0,
-                )
-                model.learn(total_timesteps=timesteps)
+                selected_model = strategy.train_a2c()
                 selected_name = "A2C"
-                selected_model = model
 
             elif algo == "PPO":
-                from stable_baselines3 import PPO
-                env = strategy._make_env(train_data, is_eval=False)
-                from core.config.settings import MODEL_CONFIG as MC
-                model = PPO(
-                    "MlpPolicy", env,
-                    learning_rate=MC.get("algorithms", {}).get("ppo", {}).get("learning_rate", 0.00025),
-                    n_steps=MC.get("algorithms", {}).get("ppo", {}).get("n_steps", 2048),
-                    batch_size=MC.get("algorithms", {}).get("ppo", {}).get("batch_size", 64),
-                    ent_coef=MC.get("algorithms", {}).get("ppo", {}).get("ent_coef", 0.01),
-                    verbose=0,
-                )
-                model.learn(total_timesteps=timesteps)
+                selected_model = strategy.train_ppo()
                 selected_name = "PPO"
-                selected_model = model
 
             elif algo == "DDPG":
-                from stable_baselines3 import DDPG
-                env = strategy._make_env(train_data, is_eval=False)
-                from core.config.settings import MODEL_CONFIG as MC
-                model = DDPG(
-                    "MlpPolicy", env,
-                    learning_rate=MC.get("algorithms", {}).get("ddpg", {}).get("learning_rate", 0.001),
-                    batch_size=MC.get("algorithms", {}).get("ddpg", {}).get("batch_size", 128),
-                    buffer_size=MC.get("algorithms", {}).get("ddpg", {}).get("buffer_size", 50000),
-                    verbose=0,
-                )
-                model.learn(total_timesteps=timesteps)
+                selected_model = strategy.train_ddpg()
                 selected_name = "DDPG"
-                selected_model = model
-
 
             else:  # All (Ensemble)
-                selected_name, selected_model = strategy.train_and_select()
+                selected_name, selected_model = strategy.train_and_select(total_timesteps=timesteps)
 
             # Evaluate on val set to get Sharpe preview
             df_account, df_actions, df_shares = strategy.evaluate_and_get_trajectory(
