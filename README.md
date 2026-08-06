@@ -126,14 +126,22 @@ pip install -r requirements.txt
    mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS ai_quantum_2026 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
    mysql -u root -p ai_quantum_2026 < database/schema.sql
    ```
-3. Create a `.env` file in the root directory with your database credentials:
+3. Create a `.env` file in the root directory with your database credentials and API/storage paths:
    ```ini
+   # MySQL Relational Database Credentials
    MYSQL_HOST=localhost
    MYSQL_PORT=3306
    MYSQL_USER=root
    MYSQL_PASSWORD=your_password_here
    MYSQL_DATABASE=ai_quantum_2026
+
+   # DuckDB Analytical Storage Path
+   DUCKDB_PATH=data/processed/portfolio.duckdb
+
+   # Web Scraping & API Headers
+   USER_AGENT=your_user_agent
    ```
+
 
 ### Step 5: Fetch Market & Macro Data via API Pipeline
 > [!IMPORTANT]
