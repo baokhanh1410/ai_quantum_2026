@@ -4,7 +4,7 @@ model_engine:
   train_end_date: "2022-12-31"
   val_start_date: "2023-01-01"
   val_end_date: "2023-12-31"
-  test_start_date: "2024-01-01"
+  test_start_date: "2024-01-01"   
   test_end_date: "2024-12-31"
 
   # Asset selection (Filter by asset class IDs)
@@ -32,11 +32,11 @@ model_engine:
 
   # Reward Strategy Configuration
   reward_settings:
-    reward_type: "net_return" # Options: "net_return", "sortino", "drawdown_penalty"
+    reward_type: "excess_return" # Options: "net_return", "sortino", "drawdown_penalty", "excess_return"
     scale_factor: 10.0
-    downside_penalty_coef: 2.0
-    mdd_threshold: 0.05
-    mdd_penalty_coef: 5.0
+    alpha_multiplier: 1.8
+    mdd_threshold: 0.02
+    mdd_penalty_coef: 5.0      # Fix B06: renamed from downside_penalty_coef → mdd_penalty_coef
 
   # Training Execution Settings
   training_settings:

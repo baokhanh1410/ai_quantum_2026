@@ -1,10 +1,12 @@
 """Charts Component — Plotly interactive chart wrappers for Streamlit demo.
 
-Provides:
-- plot_close_price_plotly(): OHLCV line chart for a single ticker
-- plot_action_histogram_plotly(): Action distribution histogram per ticker
-- render_metrics_cards(): KPI cards using st.metric()
+Provides executive, modern, and publication-ready Plotly charts with:
+- Crisp percentage formatting & clear financial units (%)
+- Clean legend positioning without overlap
+- Curated color palettes for Multi-Asset / Sector tickers
+- Interactive hover tooltips
 """
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,22 +14,40 @@ import plotly.graph_objects as go
 import plotly.express as px
 from typing import Dict, Any, Optional
 
+# Curated palette for assets & sectors
+TICKER_COLORS = {
+    "CASH": "#10B981",    # Emerald Green
+    "VNCOND": "#3B82F6",  # Royal Blue
+    "VNCONS": "#8B5CF6",  # Violet / Purple
+    "VNENE": "#F59E0B",   # Amber / Gold
+    "VNFIN": "#EF4444",   # Coral Red
+    "VNHEAL": "#EC4899",  # Pink
+    "VNIND": "#6366F1",   # Indigo
+    "VNIT": "#06B6D4",    # Cyan
+    "VNMAT": "#F97316",   # Orange
+    "VNREAL": "#84CC16",  # Lime Green
+    "VNUTI": "#14B8A6",   # Teal
+    "SJC_SELL": "#D97706",# Dark Amber / Gold
+}
+
+DEFAULT_PALETTE = [
+    "#10B981", "#3B82F6", "#8B5CF6", "#F59E0B", "#EF4444",
+    "#EC4899", "#6366F1", "#06B6D4", "#F97316", "#84CC16",
+    "#14B8A6", "#D97706", "#64748B", "#475569"
+]
+
+
+def _get_ticker_color(ticker: str, index: int = 0) -> str:
+    """Returns assigned color for a ticker symbol or fallback from palette."""
+    return TICKER_COLORS.get(ticker, DEFAULT_PALETTE[index % len(DEFAULT_PALETTE)])
+
 
 def plot_close_price_plotly(
     df: pd.DataFrame,
     ticker: str,
     title: Optional[str] = None,
 ) -> go.Figure:
-    """Renders an interactive Plotly line chart of closing prices for one ticker.
-
-    Args:
-        df: DataFrame with columns ['date', 'tic', 'close', ...].
-        ticker: Ticker symbol to plot.
-        title: Optional chart title.
-
-    Returns:
-        Plotly Figure object (caller passes to st.plotly_chart).
-    """
+    """Renders an interactive Plotly line chart of closing prices for one ticker."""
     df_t = df[df["tic"] == ticker].copy()
     df_t["date"] = pd.to_datetime(df_t["date"])
     df_t = df_t.sort_values("date")
@@ -38,18 +58,18 @@ def plot_close_price_plotly(
         y=df_t["close"],
         mode="lines",
         name=ticker,
-        line=dict(color="#4C72B0", width=2),
-        hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Giá đóng cửa: %{y:,.0f} VND<extra></extra>",
+        line=dict(color=_get_ticker_color(ticker), width=2.2),
+        hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Giá đóng cửa: <b>%{y:,.2f} VND</b><extra></extra>",
     ))
 
     fig.update_layout(
-        title=title or f"Giá đóng cửa — {ticker}",
-        xaxis_title="Ngày",
-        yaxis_title="Giá (VND)",
+        title=dict(text=title or f"Biến động Giá đóng cửa — {ticker}", font=dict(size=16, weight="bold")),
+        xaxis=dict(title="Ngày", showgrid=True, gridcolor="#F3F4F6"),
+        yaxis=dict(title="Giá (VND)", tickformat=",", showgrid=True, gridcolor="#F3F4F6"),
         hovermode="x unified",
         template="plotly_white",
         height=400,
-        margin=dict(l=50, r=20, t=50, b=40),
+        margin=dict(l=60, r=30, t=50, b=40),
         font=dict(family="Inter, sans-serif"),
     )
     return fig
@@ -59,51 +79,76 @@ def plot_action_histogram_plotly(
     df_actions: pd.DataFrame,
     max_cols: int = 4,
 ) -> Optional[go.Figure]:
-    """Renders an interactive histogram of action values per ticker/CASH.
-
-    Args:
-        df_actions: DataFrame with 'date' + one column per ticker/CASH.
-        max_cols: Max tickers to display per row.
-
-    Returns:
-        Plotly Figure or None if no ticker data.
-    """
+    """Renders an interactive histogram of action values per ticker/CASH with % units."""
     ticker_cols = [c for c in df_actions.columns if c != "date"]
     if not ticker_cols:
         return None
 
-    # Melt to long format
-    df_long = df_actions.melt(id_vars="date", value_vars=ticker_cols,
-                               var_name="Ticker", value_name="Weight")
+    # Convert weights from fraction [0.0, 1.0] to percentage [0%, 100%]
+    df_pct = df_actions.copy()
+    for col in ticker_cols:
+        df_pct[col] = df_pct[col] * 100.0
+
+    df_long = df_pct.melt(
+        id_vars="date",
+        value_vars=ticker_cols,
+        var_name="Ticker",
+        value_name="Weight_Pct"
+    )
 
     fig = px.histogram(
         df_long,
-        x="Weight",
+        x="Weight_Pct",
+        color="Ticker",
         facet_col="Ticker",
         facet_col_wrap=max_cols,
-        nbins=30,
-        title="Phân phối Tỷ trọng Hành động (Action Weight Distribution)",
-        labels={"Weight": "Tỷ trọng [0.0, 1.0]", "count": "Tần suất"},
+        nbins=25,
+        title="Phân phối Tỷ trọng Hành động (Trục X: Tỷ trọng phân bổ % | Trục Y: Số phiên)",
+        color_discrete_map=TICKER_COLORS,
         template="plotly_white",
-        height=max(300, 200 * ((len(ticker_cols) - 1) // max_cols + 1)),
+        height=max(360, 230 * ((len(ticker_cols) - 1) // max_cols + 1)),
     )
+
+    # Clean facet titles (strip "Ticker=") and format font cleanly
+    fig.for_each_annotation(
+        lambda a: a.update(
+            text=f"<b>{a.text.split('=')[-1]}</b>",
+            font=dict(size=12, color="#1F2937")
+        )
+    )
+
+    # Clear individual subplot axis titles to prevent 12 overlapping axis title labels!
+    fig.update_xaxes(
+        title_text="",       # Clear individual subplot X-axis text title
+        ticksuffix="%",      # Display % suffix on ticks (0%, 20%, 40%...)
+        showgrid=True,
+        gridcolor="#F3F4F6",
+        tickfont=dict(size=9.5),
+        range=[0, 105],
+    )
+    fig.update_yaxes(
+        title_text="",       # Clear individual subplot Y-axis text title
+        showgrid=True,
+        gridcolor="#F3F4F6",
+        tickfont=dict(size=9.5),
+    )
+
+    fig.update_traces(
+        marker=dict(line=dict(color="rgba(0,0,0,0.15)", width=0.5)),
+        hovertemplate="<b>Tỷ trọng: %{x:.1f}%</b><br>Số phiên: <b>%{y} phiên</b><extra></extra>",
+    )
+
     fig.update_layout(
         font=dict(family="Inter, sans-serif"),
+        title=dict(font=dict(size=15, weight="bold")),
         showlegend=False,
-        margin=dict(l=40, r=20, t=60, b=40),
+        margin=dict(l=50, r=30, t=75, b=50),
     )
     return fig
 
 
 def plot_cash_allocation_plotly(df_actions: pd.DataFrame) -> Optional[go.Figure]:
-    """Renders a stacked area chart showing portfolio weight allocation over time (CASH vs Stocks).
-
-    Args:
-        df_actions: DataFrame with 'date' + action columns ('CASH', tickers...).
-
-    Returns:
-        Plotly Figure.
-    """
+    """Renders a stacked area chart showing portfolio weight allocation over time (CASH vs Stocks) with % units."""
     cols = [c for c in df_actions.columns if c != "date"]
     if not cols:
         return None
@@ -113,34 +158,52 @@ def plot_cash_allocation_plotly(df_actions: pd.DataFrame) -> Optional[go.Figure]
     df = df.sort_values("date")
 
     fig = go.Figure()
-    colors = ["#2ca02c", "#1f77b4", "#ff7f0e", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
 
     for i, col in enumerate(cols):
-        color = colors[i % len(colors)]
+        color = _get_ticker_color(col, i)
         fig.add_trace(go.Scatter(
             x=df["date"],
             y=df[col] * 100.0,
             mode="lines",
             stackgroup="one",
             name=col,
-            line=dict(width=0.5, color=color),
-            hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>{col}: %{{y:.1f}}%<extra></extra>",
+            line=dict(width=0.6, color=color),
+            fillcolor=color,
+            hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br><span style='color:{color}'>■</span> {col}: <b>%{{y:.2f}}%</b><extra></extra>",
         ))
 
     fig.update_layout(
-        title="Biến động Tỷ trọng Danh mục qua Thời gian (Portfolio Weight Allocation: CASH vs Stocks)",
-        xaxis_title="Ngày",
-        yaxis_title="Tỷ trọng (%)",
-        yaxis_range=[0, 100],
+        title=dict(
+            text="Biến động Tỷ trọng Danh mục qua Thời gian (Portfolio Weight Allocation: CASH vs Sectors)",
+            font=dict(size=16, weight="bold")
+        ),
+        xaxis=dict(title="Ngày", showgrid=True, gridcolor="#F3F4F6"),
+        yaxis=dict(
+            title="Tỷ trọng Phân bổ (%)",
+            ticksuffix="%",
+            range=[0, 100.5],
+            showgrid=True,
+            gridcolor="#F3F4F6",
+        ),
         hovermode="x unified",
         template="plotly_white",
-        height=400,
+        height=490,
         font=dict(family="Inter, sans-serif"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=50, r=20, t=60, b=40),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.22,
+            xanchor="center",
+            x=0.5,
+            title=dict(text="<b>Tài sản / Ngành:</b>", font=dict(size=11)),
+            font=dict(size=11),
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="#E5E7EB",
+            borderwidth=1,
+        ),
+        margin=dict(l=60, r=30, t=65, b=110),
     )
     return fig
-
 
 
 def plot_nav_plotly(
@@ -148,16 +211,7 @@ def plot_nav_plotly(
     df_benchmark: Optional[pd.DataFrame] = None,
     benchmark_name: str = "VN30",
 ) -> go.Figure:
-    """Interactive Plotly NAV curve — Agent vs Benchmark.
-
-    Args:
-        df_account: DataFrame with ['date', 'account_value'].
-        df_benchmark: Optional DataFrame with ['date', 'close'] or ['date', 'account_value'].
-        benchmark_name: Label for benchmark series.
-
-    Returns:
-        Plotly Figure.
-    """
+    """Interactive Plotly NAV curve — Agent vs Benchmark with % units."""
     df_a = df_account.copy()
     df_a["date"] = pd.to_datetime(df_a["date"])
     df_a = df_a.sort_values("date")
@@ -167,17 +221,19 @@ def plot_nav_plotly(
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=df_a["date"], y=nav_agent,
-        mode="lines", name="DRL Agent",
-        line=dict(color="#1f77b4", width=2.5),
-        hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Agent: %{y:.2f}%<extra></extra>",
+        x=df_a["date"],
+        y=nav_agent,
+        mode="lines",
+        name="DRL Agent (Proposed)",
+        line=dict(color="#2563EB", width=2.8),
+        hovertemplate="<b>%{x|%Y-%m-%d}</b><br><span style='color:#2563EB'>■</span> DRL Agent: <b>%{y:+.2f}%</b><extra></extra>",
     ))
 
     if df_benchmark is not None and not df_benchmark.empty:
         bm_col = "account_value" if "account_value" in df_benchmark.columns else "close"
         df_bm = df_benchmark.copy()
         
-        # Standardize date format for clean inner/left merge
+        # Standardize date format for clean alignment
         df_a_dates = pd.DataFrame({"date": pd.to_datetime(df_a["date"]).dt.strftime("%Y-%m-%d")})
         df_bm["date_str"] = pd.to_datetime(df_bm["date"]).dt.strftime("%Y-%m-%d")
 
@@ -190,78 +246,88 @@ def plot_nav_plotly(
         if len(bm_vals) > 0 and not np.isnan(bm_vals[0]) and bm_vals[0] > 0:
             nav_bm = (bm_vals / bm_vals[0] - 1.0) * 100.0
             fig.add_trace(go.Scatter(
-                x=df_a["date"], y=nav_bm,
-                mode="lines", name=benchmark_name,
-                line=dict(color="#ff7f0e", width=2, dash="dash"),
-                hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>{benchmark_name}: %{{y:.2f}}%<extra></extra>",
+                x=df_a["date"],
+                y=nav_bm,
+                mode="lines",
+                name=f"Benchmark ({benchmark_name})",
+                line=dict(color="#F59E0B", width=2.0, dash="dash"),
+                hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br><span style='color:#F59E0B'>■</span> {benchmark_name}: <b>%{{y:+.2f}}%</b><extra></extra>",
             ))
 
-    fig.add_hline(y=0, line_dash="dot", line_color="#888888", line_width=1)
+    fig.add_hline(y=0, line_dash="dot", line_color="#9CA3AF", line_width=1)
     fig.update_layout(
-        title="NAV Curve: DRL Agent vs Benchmark",
-        xaxis_title="Ngày",
-        yaxis_title="Cumulative Return (%)",
-        yaxis_tickformat=".2f",
+        title=dict(text=f"Đường cong NAV: DRL Agent vs Benchmark ({benchmark_name})", font=dict(size=16, weight="bold")),
+        xaxis=dict(title="Ngày", showgrid=True, gridcolor="#F3F4F6"),
+        yaxis=dict(
+            title="Lợi nhuận tích lũy (%)",
+            ticksuffix="%",
+            tickformat="+.1f",
+            showgrid=True,
+            gridcolor="#F3F4F6"
+        ),
         hovermode="x unified",
         template="plotly_white",
         height=450,
         font=dict(family="Inter, sans-serif"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=50, r=20, t=60, b=40),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#E5E7EB",
+            borderwidth=1
+        ),
+        margin=dict(l=60, r=30, t=65, b=40),
     )
     return fig
 
 
 def plot_drawdown_plotly(df_account: pd.DataFrame) -> go.Figure:
-    """Interactive Plotly drawdown (underwater) chart.
-
-    Args:
-        df_account: DataFrame with ['date', 'account_value'].
-
-    Returns:
-        Plotly Figure.
-    """
+    """Interactive Plotly drawdown (underwater) chart with % units."""
     df = df_account.copy()
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date")
 
     values = df["account_value"].values
     running_max = np.maximum.accumulate(values)
-    # Avoid division by zero
     drawdown = np.where(running_max > 0, (values / running_max - 1.0) * 100.0, 0.0)
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=df["date"], y=drawdown,
+        x=df["date"],
+        y=drawdown,
         mode="lines",
         fill="tozeroy",
-        name="Drawdown",
-        line=dict(color="#d62728", width=1.5),
-        fillcolor="rgba(214, 39, 40, 0.25)",
-        hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Drawdown: %{y:.2f}%<extra></extra>",
+        name="Drawdown (%)",
+        line=dict(color="#EF4444", width=1.8),
+        fillcolor="rgba(239, 68, 68, 0.20)",
+        hovertemplate="<b>%{x|%Y-%m-%d}</b><br><span style='color:#EF4444'>■</span> Drawdown: <b>%{y:.2f}%</b><extra></extra>",
     ))
 
-    fig.add_hline(y=0, line_color="#444444", line_width=0.8)
+    fig.add_hline(y=0, line_color="#6B7280", line_width=1)
     fig.update_layout(
-        title="Underwater Plot (Drawdown %)",
-        xaxis_title="Ngày",
-        yaxis_title="Drawdown (%)",
-        yaxis_tickformat=".1f",
+        title=dict(text="Underwater Plot — Biến động Sụt giảm Tài sản (Max Drawdown %)", font=dict(size=15, weight="bold")),
+        xaxis=dict(title="Ngày", showgrid=True, gridcolor="#F3F4F6"),
+        yaxis=dict(
+            title="Sụt giảm (%)",
+            ticksuffix="%",
+            tickformat=".1f",
+            showgrid=True,
+            gridcolor="#F3F4F6"
+        ),
         hovermode="x unified",
         template="plotly_white",
-        height=300,
+        height=320,
         font=dict(family="Inter, sans-serif"),
-        margin=dict(l=50, r=20, t=50, b=40),
+        margin=dict(l=60, r=30, t=50, b=40),
     )
     return fig
 
 
 def render_metrics_cards(metrics: Dict[str, Any]) -> None:
-    """Render KPI metric cards using st.metric() in a grid layout.
-
-    Args:
-        metrics: Dictionary from MetricsAnalyzer.calculate_all().
-    """
+    """Render KPI metric cards using st.metric() in a clean 4-column grid layout."""
     col1, col2, col3, col4 = st.columns(4)
 
     cum_ret = metrics.get("cumulative_return", 0.0)
@@ -280,10 +346,10 @@ def render_metrics_cards(metrics: Dict[str, Any]) -> None:
     with col1:
         st.metric(
             "📈 Lợi nhuận tích lũy",
-            f"{cum_ret*100:.2f}%",
+            f"{cum_ret*100:+.2f}%",
             delta=f"vs BM: {(cum_ret - bm_cum)*100:+.2f}%" if bm_cum is not None else None,
         )
-        st.metric("📅 LN hàng năm", f"{ann_ret*100:.2f}%")
+        st.metric("📅 Lợi nhuận quy năm", f"{ann_ret*100:+.2f}%")
 
     with col2:
         st.metric(
@@ -298,13 +364,13 @@ def render_metrics_cards(metrics: Dict[str, Any]) -> None:
         st.metric("🔄 Calmar Ratio", f"{calmar:.3f}")
 
     with col4:
-        st.metric("🏆 Win Rate", f"{win*100:.1f}%")
-        st.metric("📊 Biến động / năm", f"{ann_vol*100:.2f}%")
+        st.metric("🏆 Win Rate (Phiên thắng)", f"{win*100:.1f}%")
+        st.metric("📊 Biến động quy năm", f"{ann_vol*100:.2f}%")
 
     if bm:
         st.caption(
-            f"Benchmark ({metrics.get('benchmark_name', 'VN30')}): "
-            f"Return={bm.get('cumulative_return', 0)*100:.2f}%  |  "
-            f"Sharpe={bm.get('sharpe_ratio', 0):.3f}  |  "
-            f"Max DD={bm.get('max_drawdown', 0)*100:.2f}%"
+            f"💡 **Benchmark ({metrics.get('benchmark_name', 'VN30')})**: "
+            f"Return = {bm.get('cumulative_return', 0)*100:+.2f}%  |  "
+            f"Sharpe = {bm.get('sharpe_ratio', 0):.3f}  |  "
+            f"Max DD = {bm.get('max_drawdown', 0)*100:.2f}%"
         )

@@ -10,7 +10,8 @@ transaction_costs:
   brokerage_fee_buy: 0.0015       # Buy brokerage fee (0.15%)
   brokerage_fee_sell: 0.0015      # Sell brokerage fee (0.15%)
   personal_income_tax_sell: 0.001 # Personal income tax on sell per Circular 92/2015/TT-BTC (0.10%)
-  
+  cash_advance_fee_daily: 0.0003  # Phí ứng trước tiền bán 0.03%/ngày (~10.95%/năm) nếu tái đầu tư tiền bán ngay T+0/T+1
+
   # Total effective friction:
   # - Buy side = 0.15%
   # - Sell side = 0.15% + 0.10% = 0.25%
@@ -20,6 +21,8 @@ trading_rules:
   lot_size: 100                   # Lot size 100 shares (Enforces int(shares / 100) * 100)
   min_order_value: 0              # Minimum order value in VND
   allow_short_selling: false      # Short selling restriction
+  max_volume_liquidity_ratio: 0.10 # Giới hạn tỷ lệ thanh khoản tối đa 10% tổng khối lượng giao dịch phiên (ADTV)
+
 
 # 3. Daily Price Limits per Exchange
 price_limits:
@@ -29,7 +32,7 @@ price_limits:
 
 # 4. Systemic Risk Controls
 risk_controls:
-  default_turbulence_threshold: 100.0 # Kritzman turbulence index threshold for risk mitigation
+  default_turbulence_threshold: 80.0 # Kritzman turbulence index threshold for risk mitigation
   force_sell_on_turbulence: true      # Force liquidate / shift to Cash on turbulence breach
 
 # 5. Asset Class Specific Microstructure & Execution Rules

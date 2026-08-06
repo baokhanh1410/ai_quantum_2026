@@ -73,11 +73,23 @@ if load_btn:
     with st.spinner("⏳ Đang tải dữ liệu từ database..."):
         try:
             from model_engine.data.data_service import DataQueryService
-            svc = DataQueryService()
+            from model_engine.data.processor import DataProcessor
+            from core.config.settings import MODEL_CONFIG
 
-            train_df = svc.fetch_data(ts_str, te_str)
-            val_df   = svc.fetch_data(vs_str, ve_str)
-            bm_df    = svc.fetch_symbol_data("VN30", ts_str, ve_str)
+            svc = DataQueryService()
+            features = MODEL_CONFIG.get(
+                "features",
+                ["RSI", "PPO", "CCI", "ADX", "ATR", "VOLATILITY", "YIELD_CURVE_SLOPE", "DXY_LOG_RETURN", "VN3YT"]
+            )
+
+            # 1. Truy vấn dữ liệu thô kèm lịch sử nung nóng (lookback_days=45)
+            raw_train_df = svc.fetch_data(ts_str, te_str, lookback_days=45)
+            raw_val_df   = svc.fetch_data(vs_str, ve_str, lookback_days=45)
+            bm_df        = svc.fetch_symbol_data("VN30", ts_str, ve_str)
+
+            # 2. Tiền xử lý: Quảng bá biến vĩ mô, chuẩn hóa Rolling Z-Score và lọc bỏ warm-up history
+            train_df = DataProcessor(raw_train_df, features).clean_data(start_date=ts_str)
+            val_df   = DataProcessor(raw_val_df, features).clean_data(start_date=vs_str)
 
             set_state(KEY_TRAIN_DATA,   train_df)
             set_state(KEY_VAL_DATA,     val_df)
@@ -87,11 +99,11 @@ if load_btn:
             set_state(KEY_VAL_START,    vs_str)
             set_state(KEY_VAL_END,      ve_str)
 
-            st.success(f"✅ Đã tải: Train={len(train_df):,} dòng | Val={len(val_df):,} dòng | VN30={len(bm_df):,} ngày")
+            st.success(f"✅ Đã tải và tiền xử lý Z-Score: Train={len(train_df):,} dòng ({train_df['tic'].nunique() if not train_df.empty else 0} Tickers) | Val={len(val_df):,} dòng | VN30={len(bm_df):,} ngày")
 
         except Exception as e:
-            st.error(f"❌ Lỗi kết nối database:\n\n```\n{e}\n```")
-            st.info("💡 Kiểm tra cấu hình tại `config/api.yaml` và đảm bảo MySQL đang chạy.")
+            st.error(f"❌ Lỗi kết nối hoặc xử lý dữ liệu:\n\n```\n{e}\n```")
+            st.info("💡 Kiểm tra cấu hình tại `config/api.yaml` và đảm bảo MySQL/DuckDB đang hoạt động.")
             st.stop()
 
 # ─── Display if Data is Loaded ───────────────────────────────────────────────

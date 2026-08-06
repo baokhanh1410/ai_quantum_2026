@@ -86,7 +86,8 @@ class DataProcessor:
             
         # 2. Fill missing values per tradable ticker — forward fill ONLY (no bfill to prevent future leakage)
         df = df.sort_values(['date', 'tic'])
-        df = df.groupby('tic', group_keys=False).apply(lambda x: x.ffill()).reset_index(drop=True)
+        cols_to_ffill = [c for c in df.columns if c != 'tic']
+        df[cols_to_ffill] = df.groupby('tic')[cols_to_ffill].ffill()
 
         # 3. Clean initial 0 values (lookback warm-up period) in technical indicators by forward-filling per ticker
         #    NOTE: We use ffill here (not bfill) to avoid any future leakage. Values at the very start (no history)

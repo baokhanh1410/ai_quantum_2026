@@ -39,10 +39,21 @@ class DataRepository:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS asset_classes (
                         id INTEGER DEFAULT nextval('asset_classes_id_seq') PRIMARY KEY,
-                        name VARCHAR UNIQUE NOT NULL,
+                        name VARCHAR UNIQUE NOT NULL
+                    );
+                """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS asset_class_metadata (
+                        asset_class_id INTEGER PRIMARY KEY REFERENCES asset_classes(id),
                         description VARCHAR,
                         settlement_type VARCHAR,
-                        default_locked_days INTEGER DEFAULT 0
+                        default_locked_days INTEGER DEFAULT 0,
+                        price_limit_ratio DOUBLE,
+                        default_lot_size INTEGER DEFAULT 100,
+                        default_trading_fee DOUBLE DEFAULT 0.001,
+                        allow_short BOOLEAN DEFAULT FALSE,
+                        handler VARCHAR,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
                 """)
                 conn.execute("CREATE SEQUENCE IF NOT EXISTS tickers_id_seq;")
@@ -82,7 +93,7 @@ class DataRepository:
             logger.warning(f"DuckDB tables init skipped or warning ({e}). Proceeding...")
 
     def _init_mysql_asset_classes(self) -> None:
-        """Populates asset_classes in MySQL using configurations in assets.yaml."""
+        """Populates asset_classes (name only) and asset_class_metadata in MySQL using configurations in assets.yaml."""
         session = next(get_mysql_session())
         try:
             for class_name, config in settings.asset_class.items():
@@ -90,30 +101,57 @@ class DataRepository:
                 desc = config.get("description", "")
                 locked_days = config.get("locked_days", 0)
                 settlement_type = f"T+{locked_days}"
+                price_limit_ratio = config.get("price_limit_ratio", None)
+                handler = config.get("handler", None)
+                default_lot_size = 100 if class_id in [1, 2, 3] else 1
+                default_trading_fee = 0.001 if class_id in [1, 2, 3] else 0.0
                 
                 session.execute(text("DELETE FROM asset_classes WHERE name = :name AND id != :id"), {"name": class_name, "id": class_id})
                 session.execute(
                     text("""
-                        INSERT INTO asset_classes (id, name, description, settlement_type, default_locked_days)
-                        VALUES (:id, :name, :desc, :settlement, :locked_days)
+                        INSERT INTO asset_classes (id, name)
+                        VALUES (:id, :name)
                         ON DUPLICATE KEY UPDATE
-                            name = VALUES(name),
+                            name = VALUES(name);
+                    """),
+                    {"id": class_id, "name": class_name}
+                )
+                session.execute(
+                    text("""
+                        INSERT INTO asset_class_metadata (asset_class_id, description, settlement_type, default_locked_days, price_limit_ratio, default_lot_size, default_trading_fee, allow_short, handler)
+                        VALUES (:id, :desc, :settlement, :locked_days, :price_limit, :lot_size, :fee, 0, :handler)
+                        ON DUPLICATE KEY UPDATE
                             description = VALUES(description),
                             settlement_type = VALUES(settlement_type),
-                            default_locked_days = VALUES(default_locked_days);
+                            default_locked_days = VALUES(default_locked_days),
+                            price_limit_ratio = VALUES(price_limit_ratio),
+                            default_lot_size = VALUES(default_lot_size),
+                            default_trading_fee = VALUES(default_trading_fee),
+                            handler = VALUES(handler);
                     """),
-                    {"id": class_id, "name": class_name, "desc": desc, "settlement": settlement_type, "locked_days": locked_days}
+                    {
+                        "id": class_id,
+                        "desc": desc,
+                        "settlement": settlement_type,
+                        "locked_days": locked_days,
+                        "price_limit": price_limit_ratio,
+                        "lot_size": default_lot_size,
+                        "fee": default_trading_fee,
+                        "handler": handler
+                    }
                 )
             session.commit()
         except Exception as e:
             session.rollback()
-            logger.error(f"Failed to initialize MySQL asset classes: {e}")
+            logger.error(f"Failed to initialize MySQL asset classes metadata: {e}")
             raise DatabaseError(f"MySQL asset classes init failed: {e}") from e
         finally:
             session.close()
 
+
+
     def _init_duckdb_asset_classes(self) -> None:
-        """Populates asset_classes in DuckDB using configurations in assets.yaml."""
+        """Populates asset_classes and asset_class_metadata in DuckDB using configurations in assets.yaml."""
         try:
             conn = get_duckdb_connection(read_only=False)
             try:
@@ -122,27 +160,35 @@ class DataRepository:
                     desc = config.get("description", "")
                     locked_days = config.get("locked_days", 0)
                     settlement_type = f"T+{locked_days}"
+                    price_limit_ratio = config.get("price_limit_ratio", None)
+                    handler = config.get("handler", None)
+                    default_lot_size = 100 if class_id in [1, 2, 3] else 1
+                    default_trading_fee = 0.001 if class_id in [1, 2, 3] else 0.0
                     
                     try:
                         conn.execute("DELETE FROM asset_classes WHERE name = ? AND id != ?", (class_name, class_id))
                     except Exception:
                         pass
                     
-                    existing = conn.execute("SELECT name, description, settlement_type, default_locked_days FROM asset_classes WHERE id = ?", (class_id,)).fetchone()
-                    if existing:
-                        if existing[0] != class_name or existing[1] != desc or existing[2] != settlement_type or existing[3] != locked_days:
-                            try:
-                                conn.execute(
-                                    "UPDATE asset_classes SET name = ?, description = ?, settlement_type = ?, default_locked_days = ? WHERE id = ?",
-                                    (class_name, desc, settlement_type, locked_days, class_id)
-                                )
-                            except Exception:
-                                pass
-                    else:
-                        conn.execute(
-                            "INSERT INTO asset_classes (id, name, description, settlement_type, default_locked_days) VALUES (?, ?, ?, ?, ?)",
-                            (class_id, class_name, desc, settlement_type, locked_days)
-                        )
+                    conn.execute(
+                        "INSERT INTO asset_classes (id, name) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
+                        (class_id, class_name)
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO asset_class_metadata (asset_class_id, description, settlement_type, default_locked_days, price_limit_ratio, default_lot_size, default_trading_fee, allow_short, handler)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, ?)
+                        ON CONFLICT (asset_class_id) DO UPDATE SET
+                            description = EXCLUDED.description,
+                            settlement_type = EXCLUDED.settlement_type,
+                            default_locked_days = EXCLUDED.default_locked_days,
+                            price_limit_ratio = EXCLUDED.price_limit_ratio,
+                            default_lot_size = EXCLUDED.default_lot_size,
+                            default_trading_fee = EXCLUDED.default_trading_fee,
+                            handler = EXCLUDED.handler
+                        """,
+                        (class_id, desc, settlement_type, locked_days, price_limit_ratio, default_lot_size, default_trading_fee, handler)
+                    )
                 conn.commit()
             finally:
                 conn.close()
@@ -151,6 +197,9 @@ class DataRepository:
 
     def _resolve_ticker_info(self, symbol: str) -> Dict[str, Any]:
         """Resolves asset_class_id, exchange, and name for a symbol from settings."""
+        # Fix: Ưu tiên tra cứu exchange từ ticker_exchange_map trong assets.yaml
+        mapped_exchange = settings.ticker_exchange_map.get(symbol, None)
+
         vn = settings.apis.vnstock
         
         def in_list(val, attribute):
@@ -162,26 +211,26 @@ class DataRepository:
             return val == attr
 
         if in_list(symbol, "etf_symbols") or in_list(symbol, "hose_symbols"):
-            return {"asset_class_id": 1, "exchange": "HOSE", "name": f"Stock {symbol} (HOSE)"}
+            return {"asset_class_id": 1, "exchange": mapped_exchange or "HOSE", "name": f"Stock {symbol} (HOSE)"}
         elif in_list(symbol, "hnx_symbols"):
-            return {"asset_class_id": 2, "exchange": "HNX", "name": f"Stock {symbol} (HNX)"}
+            return {"asset_class_id": 2, "exchange": mapped_exchange or "HNX", "name": f"Stock {symbol} (HNX)"}
         elif in_list(symbol, "upcom_symbols"):
-            return {"asset_class_id": 3, "exchange": "UPCOM", "name": f"Stock {symbol} (UPCOM)"}
+            return {"asset_class_id": 3, "exchange": mapped_exchange or "UPCOM", "name": f"Stock {symbol} (UPCOM)"}
             
         if symbol in ["SJC_BUY", "SJC_SELL"]:
-            return {"asset_class_id": 5, "exchange": "SJC", "name": "Vàng SJC " + ("Mua" if "BUY" in symbol else "Bán")}
+            return {"asset_class_id": 5, "exchange": mapped_exchange or "SJC", "name": "Vàng SJC " + ("Mua" if "BUY" in symbol else "Bán")}
             
         if symbol.startswith("VNIBOR_"):
-            return {"asset_class_id": 6, "exchange": "SBV", "name": f"Lãi suất liên ngân hàng SBV {symbol}"}
+            return {"asset_class_id": 6, "exchange": mapped_exchange or "SBV", "name": f"Lãi suất liên ngân hàng SBV {symbol}"}
             
         for key, config in settings.macro_indices.items():
             sym = config.get("symbol")
             if isinstance(sym, list) and symbol in sym:
-                return {"asset_class_id": 7, "exchange": "VNDIRECT", "name": f"Chỉ số ngành VNDirect {symbol}"}
+                return {"asset_class_id": 7, "exchange": mapped_exchange or "HOSE", "name": f"Chỉ số ngành HOSE {symbol}"}
             elif sym == symbol:
-                return {"asset_class_id": 7, "exchange": "INVESTING", "name": config.get("description", symbol)}
+                return {"asset_class_id": 7, "exchange": mapped_exchange or "MACRO", "name": config.get("description", symbol)}
                 
-        return {"asset_class_id": 7, "exchange": "UNKNOWN", "name": f"Asset {symbol}"}
+        return {"asset_class_id": 7, "exchange": mapped_exchange or "UNKNOWN", "name": f"Asset {symbol}"}
 
     def get_or_create_ticker_mysql(self, session: Session, symbol: str) -> int:
         """Retrieve ticker ID from MySQL or create it if not exists."""

@@ -141,6 +141,8 @@ class GlobalSettings:
         self.apis = ConfigNode(merged.get("apis", {}))
         self.asset_class = ConfigNode(merged.get("asset_class", {}))
         self.macro_indices = ConfigNode(merged.get("macro_indices", {}))
+        # Ticker → Exchange mapping for price limit validation (HOSE/HNX/UPCoM)
+        self.ticker_exchange_map: dict = assets_data.get("ticker_exchange_map", {})
 
         # Feature-specific settings
         raw_tech = features_data.get("technical_indicators", [])
@@ -160,6 +162,17 @@ class GlobalSettings:
         
         # Market microstructure settings
         self.market = ConfigNode(market_data)
+
+        # Fix B13: Validate val/test date split to prevent data leakage
+        _me = model_data.get("model_engine", {})
+        _val_end = _me.get("val_end_date", "")
+        _test_start = _me.get("test_start_date", "")
+        if _val_end and _test_start and _test_start <= _val_end:
+            raise ConfigurationError(
+                f"model.yaml: test_start_date='{_test_start}' phải sau val_end_date='{_val_end}'. "
+                f"Val và Test set đang trùng nhau — data leakage trong model selection!"
+            )
+
 
     def reload(self) -> None:
         """Reloads configuration files from disk."""

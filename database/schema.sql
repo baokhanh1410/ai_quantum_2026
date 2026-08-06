@@ -18,11 +18,60 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 CREATE TABLE asset_classes (
     id                   TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name                 VARCHAR(50) NOT NULL UNIQUE COMMENT 'STOCK, BOND_FUND, GOLD, CASH',
-    description          TEXT,
-    settlement_type      VARCHAR(20) COMMENT 'T+0, T+1, T+2',
-    default_locked_days  TINYINT UNSIGNED DEFAULT 0
+    name                 VARCHAR(50) NOT NULL UNIQUE COMMENT 'STOCK_HOSE, STOCK_HNX, STOCK_UPCOM, BOND_FUND, GOLD, CASH, SECTOR_INDEX, MACRO_INDEX'
 ) ENGINE=InnoDB;
+
+-- Initial Seed Data for asset_classes
+INSERT INTO asset_classes (id, name) VALUES
+(1, 'STOCK_HOSE'),
+(2, 'STOCK_HNX'),
+(3, 'STOCK_UPCOM'),
+(4, 'BOND_FUND'),
+(5, 'GOLD'),
+(6, 'CASH'),
+(7, 'SECTOR_INDEX'),
+(8, 'MACRO_INDEX')
+ON DUPLICATE KEY UPDATE 
+    name = VALUES(name);
+
+CREATE TABLE asset_class_metadata (
+    asset_class_id      TINYINT UNSIGNED PRIMARY KEY,
+    description         TEXT,
+    settlement_type     VARCHAR(20) COMMENT 'T+0, T+1, T+2',
+    default_locked_days TINYINT UNSIGNED DEFAULT 0,
+    price_limit_ratio   FLOAT COMMENT 'Bien do gia tran/san: 0.07 (HOSE), 0.10 (HNX), 0.15 (UPCOM), NULL (Gold/Bond)',
+    default_lot_size    INT UNSIGNED DEFAULT 100 COMMENT 'Lo giao dich mac dinh: 100 hoac 1',
+    default_trading_fee FLOAT DEFAULT 0.001 COMMENT 'Phi giao dich mac dinh',
+    allow_short         BOOLEAN DEFAULT FALSE COMMENT 'Cho phep ban khong hay khong',
+    handler             VARCHAR(50) COMMENT 'Module crawler/API handler',
+    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_ac_metadata_class
+        FOREIGN KEY (asset_class_id) REFERENCES asset_classes(id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Initial Seed Data for asset_class_metadata
+INSERT INTO asset_class_metadata (asset_class_id, description, settlement_type, default_locked_days, price_limit_ratio, default_lot_size, default_trading_fee, allow_short, handler) VALUES
+(1, 'HOSE Listed Equities',                'T+2', 2, 0.07, 100, 0.001, FALSE, 'vnstock'),
+(2, 'HNX Listed Equities',                 'T+2', 2, 0.10, 100, 0.001, FALSE, 'vnstock'),
+(3, 'UPCoM Listed Equities',               'T+2', 2, 0.15, 100, 0.001, FALSE, 'vnstock'),
+(4, 'Bond Fund Certificates',              'T+2', 2, NULL, 1,   0.000, FALSE, 'techcom_capital'),
+(5, 'SJC Physical Gold',                   'T+0', 0, NULL, 1,   0.000, FALSE, 'sjc_crawler'),
+(6, 'Cash / Risk-Free Interest',           'T+0', 0, 0.00, 1,   0.000, FALSE, 'sbv_crawler'),
+(7, 'HOSE Sector & Market Indices',        'T+2', 2, 0.07, 1,   0.000, FALSE, 'vndirect'),
+(8, 'Macro Indicators, FX Rates & Yields', 'T+0', 0, NULL, 1,   0.000, FALSE, 'yahoo_finance')
+ON DUPLICATE KEY UPDATE 
+    description = VALUES(description),
+    settlement_type = VALUES(settlement_type),
+    default_locked_days = VALUES(default_locked_days),
+    price_limit_ratio = VALUES(price_limit_ratio),
+    default_lot_size = VALUES(default_lot_size),
+    default_trading_fee = VALUES(default_trading_fee),
+    allow_short = VALUES(allow_short),
+    handler = VALUES(handler);
+
+
+
 
 CREATE TABLE tickers (
     id              SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

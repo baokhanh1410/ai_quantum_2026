@@ -98,4 +98,52 @@ macro_indices:
     description: "Spot Gold Price (XAU/USD)"
     handler: "yahoo_finance"
     data_format: "ohlcv"
-    
+
+# =====================================================================
+# TICKER → EXCHANGE MAPPING
+# Dùng bởi ExecutionEngine & _validate_price_limits để xác định biên độ giá
+# trần/sàn chính xác (HOSE ±7%, HNX ±10%, UPCoM ±15%).
+# Thêm mã mới vào đây khi bổ sung ticker vào danh mục đầu tư.
+# =====================================================================
+ticker_exchange_map:
+  # --- HOSE Listed Equities (±7%) ---
+  VNM:   "HOSE"
+  FPT:   "HOSE"
+  VHM:   "HOSE"
+  VIC:   "HOSE"
+  VCB:   "HOSE"
+  BID:   "HOSE"
+  CTG:   "HOSE"
+  TCB:   "HOSE"
+  MBB:   "HOSE"
+  HPG:   "HOSE"
+  MSN:   "HOSE"
+  GAS:   "HOSE"
+  SAB:   "HOSE"
+  PLX:   "HOSE"
+  VRE:   "HOSE"
+  VPB:   "HOSE"
+  HDB:   "HOSE"
+  STB:   "HOSE"
+  EIB:   "HOSE"
+  SSI:   "HOSE"
+  VND:   "HOSE"
+  MWG:   "HOSE"
+  PNJ:   "HOSE"
+  DGC:   "HOSE"
+  REE:   "HOSE"
+  # --- HNX Listed Equities (±10%) ---
+  SHB:   "HNX"
+  PVS:   "HNX"
+  NVB:   "HNX"
+  CEO:   "HNX"
+  VCS:   "HNX"
+  # --- UPCoM Listed Equities (±15%) ---
+  BSR:   "UPCoM"
+  OIL:   "UPCoM"
+  MCH:   "UPCoM"
+  # --- Defensive Assets (No exchange limit) ---
+  GOLD:  "GOLD"    # Vàng SJC — không bị biên độ trần/sàn
+  TCBF:  "BOND"    # Quỹ trái phiếu — không bị biên độ trần/sàn
+  VBF:   "BOND"    # Quỹ trái phiếu — không bị biên độ trần/sàn
+
