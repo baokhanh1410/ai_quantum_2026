@@ -10,7 +10,6 @@ import uvicorn
 
 from data_engine.routes.ingestion import router as ingestion_router
 from feature_engine.routes.feature_routes import router as feature_router
-from model_engine.routes.model_routes import router as model_router
 from core.utils.logger import setup_logger
 
 # Initialize unified package logger
@@ -27,8 +26,6 @@ app = FastAPI(
 app.include_router(ingestion_router)
 # Feature router handles /features/*
 app.include_router(feature_router)
-# Model router handles /model/*
-app.include_router(model_router)
 
 @app.get("/")
 @app.get("/health")
@@ -38,7 +35,7 @@ def health_check():
         "status": "healthy",
         "app": "unified_pipeline",
         "version": "1.0.0",
-        "mounted_routers": ["/ingestion", "/features", "/model"]
+        "mounted_routers": ["/ingestion", "/features"]
     }
 
 if __name__ == "__main__":

@@ -76,5 +76,5 @@ data/raw/*
 data
 
 #
-.*
+.*  
 !.gitignore

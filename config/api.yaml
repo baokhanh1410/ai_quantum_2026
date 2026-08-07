@@ -1,7 +1,7 @@
 system:
   project_name: "portfolio-constrained-rl"
   version: "1.0.0"
-  start_date: "2018-01-01"
+  start_date: "2016-01-01"
   end_date: null  # null defaults to current date dynamically
 
 database:
@@ -17,7 +17,17 @@ database:
 apis:
   vnstock:
     name: "vnstock Library"
-    hose_symbols: ["VN30"]
+    hose_symbols: ["VN30", "VN100", "AAA", "ACB", "AGG", "ANV", "ASM", "BCG", "BCM", "BID", "BMP", "BVH",
+      "BWE", "CII", "CMG", "CRE", "CTD", "CTG", "CTR", "DBC", "DCM", "DGC",
+      "DGW", "DHC", "DIG", "DPM", "DXG", "DXS", "EIB", "FPT", "FRT", "FTS",
+      "GAS", "GEG", "GEX", "GMD", "GVR", "HAG", "HCM", "HDB", "HDC", "HDG",
+      "HHV", "HPG", "HSG", "HT1", "IMP", "KBC", "KDC", "KDH", "KOS", "LPB",
+      "MBB", "MSB", "MSN", "MWG", "NKG", "NLG", "NT2", "OCB", "PAN", "PC1",
+      "PDR", "PHR", "PLX", "PNJ", "POW", "PPC", "PTB", "PVD", "PVT", "REE",
+      "SAB", "SAM", "SBT", "SCS", "SHB", "SJS", "SSB", "SSI", "STB", "SZC",
+      "TCB", "TCH", "TMS", "TPB", "VCB", "VCG", "VCI", "VGC", "VHC", "VHM",
+      "VIB", "VIC", "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VRE", "VSH"
+    ]
     source: ""
     resolution: "1D"
     type: "stock"

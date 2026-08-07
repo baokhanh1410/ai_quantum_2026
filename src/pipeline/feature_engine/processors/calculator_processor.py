@@ -311,8 +311,7 @@ class CalculatorProcessor:
 
         troy_oz_per_tael = 0.829
         world_gold_vnd_per_tael = (xauusd * usdvnd) / troy_oz_per_tael
-
-        # SJC is stored in VND (e.g. 92_300_000), world gold is also VND
+        
         premium = sjc_buy - world_gold_vnd_per_tael
         return premium
 
