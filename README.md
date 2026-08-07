@@ -146,8 +146,13 @@ python -m src.pipeline.main
 
 Trigger automated ingestion & feature processing via HTTP requests or Python integration scripts:
 ```bash
-# Trigger full historical data ingestion pipeline (Stocks, Gold, SBV Rates, Macro)
+# 1. Trigger full historical data ingestion pipeline (Stocks, Gold, SBV Rates, Macro)
 curl -X POST "http://localhost:8000/ingestion/all" -H "Content-Type: application/json" -d '{"start_date": "2018-01-01"}'
+
+# 2. Trigger feature engineering pipeline (Technical Indicators & Macro Features)
+curl -X POST "http://localhost:8000/features/compute" \
+     -H "Content-Type: application/json" \
+     -d '{"start_date": "2018-01-01"}'
 
 # Or run the offline verification script:
 python src/pipeline/data_engine/tests/run_verification.py
