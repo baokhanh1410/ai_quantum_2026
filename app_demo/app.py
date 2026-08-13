@@ -499,15 +499,15 @@ st.markdown('<div class="section-sub">Xem AI Robo-Advisor đưa ra khuyến ngh�
 
 # ── Simulation Playback Controls Bar ─────────────────────────────────────
 speed_map = {"Chậm": 0.7, "Thường": 0.3, "Nhanh": 0.08}
-if "sim_day" not in st.session_state:
-    st.session_state["sim_day"] = 0
+if "sim_day_slider" not in st.session_state:
+    st.session_state["sim_day_slider"] = 0
 if "sim_playing" not in st.session_state:
     st.session_state["sim_playing"] = False
 
-# Tăng sim_day ở ĐẦU run (TRƯỚC khi render bất kỳ widget nào) để tránh StreamlitAPIException
+# Tăng vị trí slider ở ĐẦU run (TRƯỚC khi render st.slider) để nút kéo di chuyển theo
 if st.session_state.get("sim_playing", False):
-    if st.session_state["sim_day"] < _TRADING_DAYS - 1:
-        st.session_state["sim_day"] += 1
+    if st.session_state["sim_day_slider"] < _TRADING_DAYS - 1:
+        st.session_state["sim_day_slider"] += 1
     else:
         st.session_state["sim_playing"] = False
 
@@ -521,18 +521,15 @@ with ctrl3:
 with ctrl4:
     speed_label = st.selectbox("⚡ Tốc độ", list(speed_map.keys()), index=1, label_visibility="collapsed")
 with ctrl5:
-    slider_val = st.slider(
+    st.slider(
         "📅 Ngày", 0, _TRADING_DAYS - 1,
-        value=st.session_state["sim_day"],
         key="sim_day_slider",
         label_visibility="collapsed",
     )
-    if not st.session_state.get("sim_playing", False):
-        st.session_state["sim_day"] = slider_val
 
 if play_btn:
-    if st.session_state["sim_day"] >= _TRADING_DAYS - 1:
-        st.session_state["sim_day"] = 0
+    if st.session_state["sim_day_slider"] >= _TRADING_DAYS - 1:
+        st.session_state["sim_day_slider"] = 0
     st.session_state["sim_playing"] = True
     st.rerun()
 
@@ -541,12 +538,12 @@ if pause_btn:
     st.rerun()
 
 if reset_btn:
-    st.session_state["sim_day"] = 0
+    st.session_state["sim_day_slider"] = 0
     st.session_state["sim_playing"] = False
     st.rerun()
 
 # Current simulation day state
-sim_day = st.session_state["sim_day"]
+sim_day = st.session_state["sim_day_slider"]
 current_row = action_df.iloc[sim_day]
 current_turb = turb_df["turbulence"].iloc[sim_day]
 
