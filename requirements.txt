@@ -11,7 +11,7 @@ duckdb>=1.0.0
 # Data Fetching & Integration Clients
 requests>=2.28.0
 vnstock>=0.2.9
-tvdatafeed>=2.1.0
+# tvdatafeed>=2.1.0  # Omitted: Not on PyPI, installed via git if needed
 python-dotenv>=1.0.0
 PyYAML>=6.0
 
