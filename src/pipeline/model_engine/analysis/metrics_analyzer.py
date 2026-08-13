@@ -13,14 +13,23 @@ from typing import Dict, Any, Optional, Tuple
 class MetricsAnalyzer:
     """Calculates comprehensive financial performance and risk metrics."""
 
-    def __init__(self, risk_free_rate: float = 0.03, trading_days: int = 252):
+    def __init__(self, risk_free_rate: Optional[float] = None, trading_days: Optional[int] = None):
         """
         Args:
-            risk_free_rate: Annual risk-free rate (e.g. 0.03 for 3%).
-            trading_days: Number of trading days per year (default 252).
+            risk_free_rate: Annual risk-free rate (e.g. 0.03 for 3%). If None, sourced from MARKET_CONFIG.
+            trading_days: Number of trading days per year (default 252). If None, sourced from MARKET_CONFIG.
         """
-        self.risk_free_rate = risk_free_rate
-        self.trading_days = trading_days
+        try:
+            from core.config.settings import MARKET_CONFIG
+            m_settings = MARKET_CONFIG.get("market_settings", {})
+            cfg_rf = float(m_settings.get("risk_free_rate", 0.03))
+            cfg_td = int(m_settings.get("trading_days_per_year", 252))
+        except Exception:
+            cfg_rf = 0.03
+            cfg_td = 252
+
+        self.risk_free_rate = float(risk_free_rate) if risk_free_rate is not None else cfg_rf
+        self.trading_days = int(trading_days) if trading_days is not None else cfg_td
 
     def _get_values(self, df_account: pd.DataFrame) -> np.ndarray:
         """Helper to extract portfolio/benchmark series values from 'account_value' or 'close'."""
@@ -72,7 +81,12 @@ class MetricsAnalyzer:
         return float((ann_return - self.risk_free_rate) / ann_vol)
 
     def compute_sortino_ratio(self, df_account: pd.DataFrame) -> float:
-        """Calculates annualized Sortino Ratio: (Annualized Return - Risk Free Rate) / Annualized Downside Volatility."""
+        """Calculates annualized Sortino Ratio: (Annualized Return - Risk Free Rate) / Annualized Downside Volatility.
+        
+        Note: This metric evaluation uses the standard financial definition (semi-deviation of negative returns).
+        In contrast, SortinoRewardCalculator in reward_calculator.py computes step-by-step reward using RMS over
+        all observations in a rolling window. This difference is intentional (performance metric vs. step reward signal).
+        """
         ann_return = self.compute_annualized_return(df_account)
         returns = self.compute_returns(df_account)
         downside_returns = returns[returns < 0]
@@ -83,6 +97,7 @@ class MetricsAnalyzer:
         if ann_downside_vol == 0 or np.isnan(ann_downside_vol):
             return 0.0
         return float((ann_return - self.risk_free_rate) / ann_downside_vol)
+
 
     def compute_max_drawdown(self, df_account: pd.DataFrame) -> Tuple[float, Optional[str], Optional[str], pd.Series]:
         """Calculates Max Drawdown (MDD) percentage, peak date, trough date, and drawdown series.

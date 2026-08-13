@@ -85,8 +85,13 @@ class FeaturePipelineService:
         ohlcv_df = self.mysql_repo.fetch_ohlcv(start_date, end_date)
 
         if ohlcv_df.empty:
-            logger.warning("No OHLCV data found for the given date range.")
-            return {"status": "warning", "message": "No raw data found.", "total_records": 0}
+            logger.warning(f"No OHLCV data found for date range {start_date} to {end_date}.")
+            return {
+                "status": "warning",
+                "message": f"No raw OHLCV data found between {start_date} and {end_date}.",
+                "total_records": 0,
+                "date_range": {"start": start_date, "end": end_date},
+            }
 
         logger.info(f"Fetched {len(ohlcv_df)} OHLCV rows for {ohlcv_df['symbol'].nunique()} symbols.")
 
@@ -189,7 +194,6 @@ class FeaturePipelineService:
         Returns:
             Total number of records inserted.
         """
-        ticker_id_map = self.mysql_repo.fetch_ticker_id_map()
         records: List[Dict[str, Any]] = []
 
         # ----- Asset-level technical indicators -----
@@ -201,7 +205,7 @@ class FeaturePipelineService:
             window = ind_cfg.get("window_size", 14)
             col_name = f"{name}_{window}"
 
-            indicator_type_id = self.mysql_repo.upsert_indicator_type(
+            self.mysql_repo.upsert_indicator_type(
                 name=name,
                 category=ind_cfg.get("category", ""),
                 window_size=window,
@@ -214,17 +218,13 @@ class FeaturePipelineService:
                 df = symbol_data[symbol]
                 if col_name not in df.columns:
                     continue
-                ticker_id = ticker_id_map.get(symbol)
-                if ticker_id is None:
-                    logger.warning(f"Ticker ID not found for '{symbol}', skipping.")
-                    continue
 
                 for ts, val in df[col_name].items():
                     if drop_nan and (val is None or (isinstance(val, float) and np.isnan(val))):
                         continue
                     records.append({
-                        "ticker_id": ticker_id,
-                        "indicator_type_id": indicator_type_id,
+                        "symbol": symbol,
+                        "indicator_name": name,
                         "timestamp": ts,
                         "value": float(val) if val is not None and not np.isnan(val) else None,
                     })
@@ -239,7 +239,7 @@ class FeaturePipelineService:
         for ind_cfg in macro_indicators:
             name = ind_cfg["name"]
 
-            macro_type_id = self.mysql_repo.upsert_macro_type(
+            self.mysql_repo.upsert_macro_type(
                 name=name,
                 unit=ind_cfg.get("unit", ""),
                 description=ind_cfg.get("description", ""),
@@ -252,7 +252,7 @@ class FeaturePipelineService:
                 if drop_nan and (val is None or (isinstance(val, float) and np.isnan(val))):
                     continue
                 macro_records.append({
-                    "macro_type_id": macro_type_id,
+                    "macro_name": name,
                     "timestamp": ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10],
                     "value": float(val) if val is not None and not np.isnan(val) else None,
                 })

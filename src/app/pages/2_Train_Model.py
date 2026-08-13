@@ -23,6 +23,7 @@ from components.state import (
     KEY_TRAIN_START, KEY_TRAIN_END, KEY_VAL_START, KEY_VAL_END,
     has_data,
 )
+from components.config_panel import render_config_panel, render_config_summary_card
 
 # ─── Page Config ─────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -47,8 +48,10 @@ with st.sidebar:
     try:
         from core.config.settings import MODEL_CONFIG
         default_timesteps = MODEL_CONFIG.get("training_settings", {}).get("total_timesteps", 20000)
+        default_ep_len = MODEL_CONFIG.get("episode_length", 60)
     except Exception:
         default_timesteps = 20000
+        default_ep_len = 60
 
     timesteps = st.number_input(
         "Total Timesteps",
@@ -64,12 +67,14 @@ with st.sidebar:
         "Episode Length (Trading Days)",
         min_value=20,
         max_value=500,
-        value=60,
+        value=int(default_ep_len),
         step=10,
         help="Độ dài episode khi reset() ngẫu nhiên trong lúc train (Rolling Horizon)",
         key="train_ep_len",
     )
 
+    st.divider()
+    model_cfg = render_config_panel(in_sidebar=True)
     st.divider()
     train_btn = st.button("▶ Bắt đầu Huấn luyện", type="primary", use_container_width=True)
     if st.button("🗑️ Xóa Model", use_container_width=True):
@@ -100,6 +105,8 @@ cfg_col2.metric("Timesteps", f"{timesteps:,}")
 cfg_col3.metric("Train Period", f"{get_state(KEY_TRAIN_START, '?')} → {get_state(KEY_TRAIN_END, '?')}")
 cfg_col4.metric("Episode Length", f"{ep_len} ngày (Random Start)")
 
+render_config_summary_card()
+
 tickers = sorted(train_data["tic"].unique().tolist()) if "tic" in train_data.columns else []
 train_dates = train_data["date"].nunique() if "date" in train_data.columns else 0
 
@@ -107,7 +114,7 @@ c1, c2 = st.columns(2)
 c1.info(f"**Train data:** {len(train_data):,} rows · {len(tickers)} tickers · {train_dates:,} trading days")
 
 try:
-    from core.config.settings import MARKET_CONFIG
+    from core.config.settings import MARKET_CONFIG, settings
     mc = MARKET_CONFIG.get("transaction_costs", {})
     lot = MARKET_CONFIG.get("trading_rules", {}).get("lot_size", 100)
     c2.info(
@@ -116,10 +123,21 @@ try:
         f"Bán {(mc.get('brokerage_fee_sell',0)+mc.get('personal_income_tax_sell',0))*100:.2f}% · "
         f"T+2 Settlement"
     )
+    t_map = getattr(settings, "ticker_exchange_map", {})
 except Exception:
     c2.info("**Market Constraints:** T+2 · Lot 100 · Fee 0.15%/0.25%")
+    t_map = {}
+
+stock_tics = [t for t in tickers if t_map.get(t, "HOSE") not in ("GOLD", "BOND")]
+defensive_tics = [t for t in tickers if t_map.get(t, "") in ("GOLD", "BOND")]
+
+with st.expander(f"📌 Danh sách tài sản trong model ({len(tickers)} tài sản: {len(stock_tics)} cổ phiếu, {len(defensive_tics)} phòng thủ)"):
+    st.markdown(f"**Cổ phiếu ({len(stock_tics)}):** " + ", ".join([f"`{t}`" for t in stock_tics]))
+    if defensive_tics:
+        st.markdown(f"**Tài sản phòng thủ ({len(defensive_tics)}):** " + ", ".join([f"`{t}`" for t in defensive_tics]))
 
 st.divider()
+
 
 # ─── Train ─────────────────────────────────────────────────────────────────
 if train_btn:
@@ -130,19 +148,33 @@ if train_btn:
             from model_engine.models.drl_models import DRLEnsembleStrategy
             from core.config.settings import MODEL_CONFIG, MARKET_CONFIG
 
-            # Build env_kwargs — đọc turbulence_threshold từ MARKET_CONFIG (Single Source of Truth)
+            # Build env_kwargs — đọc turbulence_settings từ MODEL_CONFIG
             feature_cols = [
                 c for c in train_data.columns
                 if c not in ["tic", "date", "open", "high", "low", "close", "volume"]
             ]
-            turb_threshold = MARKET_CONFIG.get("risk_controls", {}).get("default_turbulence_threshold", 100.0)
+            turb_cfg = model_cfg.get("turbulence_settings", {})
+            reward_cfg = model_cfg.get("reward_settings", {})
+            raw_trig = turb_cfg.get("threshold_trigger")
+            raw_thresh = turb_cfg.get("threshold")
+            if raw_trig is not None:
+                turb_threshold = float(raw_trig)
+            elif raw_thresh is not None:
+                turb_threshold = float(raw_thresh)
+            else:
+                turb_threshold = 100.0
+
+            initial_balance = int(model_cfg.get("initial_balance", 1_000_000_000))
+
 
             env_kwargs = {
                 "features":             feature_cols,
-                "initial_balance":      MODEL_CONFIG.get("initial_balance", 1_000_000_000),
+                "initial_balance":      initial_balance,
                 "turbulence_threshold": turb_threshold,
                 "episode_length":       ep_len,
                 "random_start":         True,
+                "reward_settings":      reward_cfg,
+                "turbulence_settings":  turb_cfg,
             }
 
             strategy = DRLEnsembleStrategy(
@@ -182,8 +214,9 @@ if train_btn:
             set_state(KEY_DF_SHARES,     df_shares)
 
             # Quick Sharpe preview
+            _trading_days = float(MARKET_CONFIG.get("market_settings", {}).get("trading_days_per_year", 252))
             returns = df_account["daily_return"]
-            quick_sharpe = float((252 ** 0.5) * returns.mean() / returns.std()) if returns.std() > 0 else 0.0
+            quick_sharpe = float((_trading_days ** 0.5) * returns.mean() / returns.std()) if returns.std() > 0 else 0.0
             cum_return = float((df_account["account_value"].iloc[-1] / df_account["account_value"].iloc[0]) - 1.0) * 100
 
             st.success(
@@ -206,9 +239,11 @@ df_account  = get_state(KEY_DF_ACCOUNT)
 if model_name and df_account is not None and not df_account.empty:
     st.subheader(f"📊 Kết quả Sơ bộ — {model_name}")
 
+    _trading_days = float(MARKET_CONFIG.get("market_settings", {}).get("trading_days_per_year", 252))
     returns = df_account["daily_return"]
     cum_ret = float((df_account["account_value"].iloc[-1] / df_account["account_value"].iloc[0]) - 1.0) * 100
-    quick_sharpe = float((252 ** 0.5) * returns.mean() / returns.std()) if returns.std() > 0 else 0.0
+    quick_sharpe = float((_trading_days ** 0.5) * returns.mean() / returns.std()) if returns.std() > 0 else 0.0
+
     mdd_vals = df_account["account_value"].values
     running_max = np.maximum.accumulate(mdd_vals)
     dd = np.where(running_max > 0, mdd_vals / running_max - 1.0, 0.0)

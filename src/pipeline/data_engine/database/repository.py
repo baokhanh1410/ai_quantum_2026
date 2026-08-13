@@ -16,6 +16,7 @@ class DataRepository:
 
     def __init__(self):
         self._ticker_cache: Dict[str, int] = {}
+        self._duckdb_ticker_cache: Dict[str, int] = {}
         self._init_duckdb()
         self._init_mysql_asset_classes()
         self._init_duckdb_asset_classes()
@@ -270,28 +271,36 @@ class DataRepository:
 
     def get_or_create_ticker_duckdb(self, symbol: str) -> int:
         """Retrieve ticker ID from DuckDB or create it if not exists."""
-        try:
-            conn = get_duckdb_connection(read_only=True)
-            try:
-                result = conn.execute("SELECT id FROM tickers WHERE symbol = ?", (symbol,)).fetchone()
-                if result:
-                    return result[0]
-            finally:
-                conn.close()
-        except Exception:
-            pass
+        if symbol in self._duckdb_ticker_cache:
+            return self._duckdb_ticker_cache[symbol]
 
         try:
             conn = get_duckdb_connection(read_only=False)
             try:
+                result = conn.execute("SELECT id FROM tickers WHERE symbol = ?", (symbol,)).fetchone()
+                if result:
+                    self._duckdb_ticker_cache[symbol] = result[0]
+                    return result[0]
+
                 info = self._resolve_ticker_info(symbol)
                 conn.execute(
-                    "INSERT INTO tickers (asset_class_id, symbol, name, exchange, active) VALUES (?, ?, ?, ?, TRUE)",
+                    """
+                    INSERT INTO tickers (asset_class_id, symbol, name, exchange, active)
+                    VALUES (?, ?, ?, ?, TRUE)
+                    ON CONFLICT (symbol) DO UPDATE SET
+                        asset_class_id = EXCLUDED.asset_class_id,
+                        name = EXCLUDED.name,
+                        exchange = EXCLUDED.exchange;
+                    """,
                     (info["asset_class_id"], symbol, info["name"], info["exchange"])
                 )
                 conn.commit()
                 res = conn.execute("SELECT id FROM tickers WHERE symbol = ?", (symbol,)).fetchone()
-                return res[0]
+                if res:
+                    ticker_id = res[0]
+                    self._duckdb_ticker_cache[symbol] = ticker_id
+                    return ticker_id
+                return 1
             finally:
                 conn.close()
         except Exception as e:

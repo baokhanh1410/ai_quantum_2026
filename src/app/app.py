@@ -111,14 +111,25 @@ và chỉ số vĩ mô (YIELD_CURVE_SLOPE, DXY_LOG_RETURN) — lưu vào databas
 </div>
 """, unsafe_allow_html=True)
 
+try:
+    from core.config.settings import MARKET_CONFIG
+    _mc = MARKET_CONFIG.get("transaction_costs", {})
+    _b_fee = _mc.get('brokerage_fee_buy', 0.0015) * 100
+    _s_fee = (_mc.get('brokerage_fee_sell', 0.0015) + _mc.get('personal_income_tax_sell', 0.0010)) * 100
+    _lot_sz = MARKET_CONFIG.get("trading_rules", {}).get("lot_size", 100)
+    _mkt_desc = f"ràng buộc T+2, lô {_lot_sz} cp, phí {_b_fee:.2f}%/{_s_fee:.2f}%"
+except Exception:
+    _mkt_desc = "ràng buộc T+2, lô 100 cp, phí 0.15%/0.25%"
+
 with col_c:
-    st.markdown("""
+    st.markdown(f"""
 <div class="engine-card" style="border-left-color: #C44E52">
 <b>🧠 Model Engine</b><br/>
 <small style="color:#555">Huấn luyện và đánh giá agent DRL (A2C/PPO/DDPG) trong môi trường
-mô phỏng thị trường VN với ràng buộc T+2, lô 100 cp, phí 0.15%/0.25%.</small>
+mô phỏng thị trường VN với {_mkt_desc}.</small>
 </div>
 """, unsafe_allow_html=True)
+
 
 st.divider()
 

@@ -55,7 +55,9 @@ class ScalerProcessor:
         if not self._scaler_path.exists():
             logger.warning(
                 f"Scaler file not found at {self._scaler_path}. "
-                f"Scaling will be skipped (identity transform)."
+                f"Scaling will be skipped (identity transform). "
+                f"RL Agent sẽ nhận features UNSCALED — kết quả training có thể không chính xác. "
+                f"Chạy pipeline generate scaler trước khi training."
             )
             return None
 
@@ -87,7 +89,11 @@ class ScalerProcessor:
             DataFrame with scaled numeric columns.
         """
         if not self.is_available:
-            logger.debug("No scaler loaded; returning data unscaled.")
+            logger.warning(
+                "ScalerProcessor: không có scaler — data đang được feed UNSCALED vào RL Agent. "
+                "Features có thể có scale rất khác nhau (ví dụ: RSI 0-100 vs ATR 0.001). "
+                "Hãy generate scaler để cải thiện chất lượng training."
+            )
             return df
 
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()

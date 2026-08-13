@@ -107,6 +107,18 @@ macro_indices:
 # =====================================================================
 ticker_exchange_map:
   # --- HOSE Listed Equities (±7%) ---
+  # Sector Index
+  VNUTI: "HOSE"
+  VNCOND: "HOSE"
+  VNCONS: "HOSE"
+  VNENE: "HOSE"
+  VNFIN: "HOSE"
+  VNHEAL: "HOSE"
+  VNIND: "HOSE"
+  VNIT: "HOSE"
+  VNMAT: "HOSE"
+  VNREAL: "HOSE"
+  # Stock
   VNM:   "HOSE"
   FPT:   "HOSE"
   VHM:   "HOSE"
@@ -146,4 +158,3 @@ ticker_exchange_map:
   GOLD:  "GOLD"    # Vàng SJC — không bị biên độ trần/sàn
   TCBF:  "BOND"    # Quỹ trái phiếu — không bị biên độ trần/sàn
   VBF:   "BOND"    # Quỹ trái phiếu — không bị biên độ trần/sàn
-

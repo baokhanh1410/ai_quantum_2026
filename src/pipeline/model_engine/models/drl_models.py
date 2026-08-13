@@ -7,7 +7,8 @@ from typing import Optional
 from stable_baselines3 import A2C, DDPG, PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.logger import configure as sb3_configure
-from core.config.settings import MODEL_CONFIG, ROOT_DIR
+from core.config.settings import MODEL_CONFIG, MARKET_CONFIG, ROOT_DIR
+from core.utils.seed_manager import set_global_seed
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,10 @@ class DRLEnsembleStrategy:
         self.config = MODEL_CONFIG.get("algorithms", {})
         self._total_timesteps = total_timesteps
         
+        # Synchronize global random seed for reproducibility
+        self.seed = int(MODEL_CONFIG.get("training_settings", {}).get("random_seed", 42))
+        set_global_seed(self.seed)
+        
     def _make_env(self, data, is_eval: bool = False):
         kwargs = self.env_kwargs.copy()
         kwargs['df'] = data
@@ -35,7 +40,9 @@ class DRLEnsembleStrategy:
             if 'episode_length' not in kwargs:
                 kwargs['episode_length'] = MODEL_CONFIG.get("episode_length", 60)
         env = self.env_train_class(**kwargs)
-        return DummyVecEnv([lambda: env])
+        # Fix B_LAMBDA: Dùng default argument capture (env=env) thay vì late-binding lambda
+        # để tránh Python closure bug — tất cả worker không share cùng 1 env object
+        return DummyVecEnv([lambda e=env: e])
 
     @property
     def total_timesteps(self) -> int:
@@ -63,6 +70,7 @@ class DRLEnsembleStrategy:
                     ent_coef=self.config.get("a2c", {}).get("ent_coef", 0.01),
                     verbose=0,
                     tensorboard_log=str(MODELS_DIR / "tb_logs" / "A2C"))
+        model.set_random_seed(self.seed)
         model.learn(total_timesteps=self.total_timesteps)
         self._save_checkpoint(model, "A2C")
         return model
@@ -77,6 +85,7 @@ class DRLEnsembleStrategy:
                     ent_coef=self.config.get("ppo", {}).get("ent_coef", 0.01),
                     verbose=0,
                     tensorboard_log=str(MODELS_DIR / "tb_logs" / "PPO"))
+        model.set_random_seed(self.seed)
         model.learn(total_timesteps=self.total_timesteps)
         self._save_checkpoint(model, "PPO")
         return model
@@ -90,6 +99,7 @@ class DRLEnsembleStrategy:
                      buffer_size=self.config.get("ddpg", {}).get("buffer_size", 50000),
                      verbose=0,
                      tensorboard_log=str(MODELS_DIR / "tb_logs" / "DDPG"))
+        model.set_random_seed(self.seed)
         model.learn(total_timesteps=self.total_timesteps)
         self._save_checkpoint(model, "DDPG")
         return model
@@ -118,7 +128,10 @@ class DRLEnsembleStrategy:
         share_memory = getattr(unwrapped_env, 'previous_share_memory', unwrapped_env.share_memory)
         tickers = unwrapped_env.tickers
 
-        # Match lengths between dates and asset memory
+        # Note: asset_memory[0] contains initial_balance (pre-trade start balance).
+        # Aligning date_memory[:min_len_asset] with asset_memory[:min_len_asset] places
+        # pre-trade initial_balance at df_account.iloc[0] with daily_return[0] = 0.
+        # This is intentional to ensure pct_change() computes the return of the first step.
         min_len_asset = min(len(date_memory), len(asset_memory))
         df_account = pd.DataFrame({
             'date': date_memory[:min_len_asset],
@@ -158,17 +171,27 @@ class DRLEnsembleStrategy:
         df_account, _, _ = self.evaluate_and_get_trajectory(model, data)
         returns = df_account['daily_return'].dropna()
         std = returns.std()
+        trading_days = float(MARKET_CONFIG.get("market_settings", {}).get("trading_days_per_year", 252))
         if not np.isnan(std) and std > 1e-8:
-            sharpe = (252 ** 0.5) * returns.mean() / std
+            sharpe = (trading_days ** 0.5) * returns.mean() / std
             if np.isnan(sharpe) or np.isinf(sharpe):
                 sharpe = 0.0
         else:
             sharpe = 0.0
         return float(sharpe)
 
+
     def train_and_select(self, total_timesteps: Optional[int] = None):
         """
         Trains all 3 models and selects the best one based on validation Sharpe Ratio.
+
+        ⚠️ KNOWN LIMITATION — Validation Leakage / Selection Bias:
+        Tất cả 3 models (A2C, PPO, DDPG) đều được evaluate trên cùng `val_data`
+        và winner được pick dựa trên Sharpe Ratio cao nhất trên tập đó.
+        Điều này tạo ra "winner's curse" / selection bias: Sharpe Ratio báo cáo
+        của model winner sẽ cao hơn Sharpe thực tế (optimistic estimate).
+        Để có unbiased estimate, cần holdout test set riêng biệt chưa được dùng
+        trong quá trình selection. Đây là known trade-off trong Walk-Forward Ensemble.
         """
         if total_timesteps is not None:
             self._total_timesteps = total_timesteps

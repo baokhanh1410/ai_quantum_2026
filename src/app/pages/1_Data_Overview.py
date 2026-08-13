@@ -17,8 +17,10 @@ from components.state import (
     set_state, get_state,
     KEY_TRAIN_DATA, KEY_VAL_DATA, KEY_BENCHMARK_DF,
     KEY_TRAIN_START, KEY_TRAIN_END, KEY_VAL_START, KEY_VAL_END,
+    KEY_SELECTED_STOCKS,
 )
 from components.charts import plot_close_price_plotly
+from components.config_panel import render_config_panel, render_config_summary_card
 
 # ─── Page Config ─────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -51,17 +53,49 @@ with st.sidebar:
     val_end     = st.date_input("Val: Đến ngày", value=pd.to_datetime(default_ve), key="di_ve")
 
     st.divider()
+    st.markdown("### 📈 Cổ phiếu Danh mục")
+    try:
+        from core.config.settings import get_portfolio_stocks, settings
+        yaml_stocks = get_portfolio_stocks()
+        ticker_map = getattr(settings, "ticker_exchange_map", {})
+        all_known = sorted(list(set(yaml_stocks + list(ticker_map.keys()))))
+        stock_options = [s for s in all_known if s not in ["GOLD", "TCBF", "VBF", "CASH", "VN30"]]
+    except Exception:
+        yaml_stocks = ["VNM", "FPT", "VCB", "VHM", "VIC", "TCB", "MBB", "HPG", "MWG", "PNJ"]
+        stock_options = yaml_stocks
+        ticker_map = {}
+
+    selected_stocks = st.multiselect(
+        "Mã cổ phiếu đầu tư (Session)",
+        options=stock_options,
+        default=yaml_stocks,
+        help="Danh sách mã cổ phiếu muốn đưa vào danh mục. Mặc định đọc từ config/market.yaml.",
+        key="ms_portfolio_stocks",
+    )
+    set_state(KEY_SELECTED_STOCKS, selected_stocks)
+
+    if not selected_stocks:
+        st.info("💡 Chưa chọn mã cổ phiếu: Hệ thống sẽ tự động tải TOÀN BỘ cổ phiếu theo asset_class_ids trong model.yaml.")
+    else:
+        missing = [s for s in selected_stocks if s not in ticker_map]
+        if missing:
+            st.warning(f"⚠️ Các mã sau chưa có trong config/assets.yaml: {missing} (sẽ dùng HOSE ±7% mặc định)")
+
+    st.divider()
     load_btn = st.button("📥 Tải Dữ liệu", type="primary", use_container_width=True)
     if st.button("🗑️ Xóa Cache", use_container_width=True):
         from components.state import clear_all_state
         clear_all_state()
         st.rerun()
 
+    st.divider()
+    render_config_panel(in_sidebar=True)
     render_sidebar_status()
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 st.title("📊 Tổng quan Dữ liệu Thị trường")
 st.caption("Tải dữ liệu OHLCV + chỉ báo kỹ thuật từ database, sau đó cấu hình ở Trang Huấn luyện.")
+render_config_summary_card()
 
 # ─── Load Data ───────────────────────────────────────────────────────────────
 if load_btn:
@@ -69,6 +103,7 @@ if load_btn:
     te_str = str(train_end)
     vs_str = str(val_start)
     ve_str = str(val_end)
+    sel_stocks = get_state(KEY_SELECTED_STOCKS, None)
 
     with st.spinner("⏳ Đang tải dữ liệu từ database..."):
         try:
@@ -77,14 +112,16 @@ if load_btn:
             from core.config.settings import MODEL_CONFIG
 
             svc = DataQueryService()
+            lookback = int(MODEL_CONFIG.get("lookback_days", 45))
             features = MODEL_CONFIG.get(
                 "features",
                 ["RSI", "PPO", "CCI", "ADX", "ATR", "VOLATILITY", "YIELD_CURVE_SLOPE", "DXY_LOG_RETURN", "VN3YT"]
             )
 
-            # 1. Truy vấn dữ liệu thô kèm lịch sử nung nóng (lookback_days=45)
-            raw_train_df = svc.fetch_data(ts_str, te_str, lookback_days=45)
-            raw_val_df   = svc.fetch_data(vs_str, ve_str, lookback_days=45)
+            # 1. Truy vấn dữ liệu thô kèm lịch sử nung nóng
+            raw_train_df = svc.fetch_data(ts_str, te_str, lookback_days=lookback, stock_tickers=sel_stocks)
+            raw_val_df   = svc.fetch_data(vs_str, ve_str, lookback_days=lookback, stock_tickers=sel_stocks)
+
             bm_df        = svc.fetch_symbol_data("VN30", ts_str, ve_str)
 
             # 2. Tiền xử lý: Quảng bá biến vĩ mô, chuẩn hóa Rolling Z-Score và lọc bỏ warm-up history

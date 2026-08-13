@@ -374,3 +374,103 @@ def render_metrics_cards(metrics: Dict[str, Any]) -> None:
             f"Sharpe = {bm.get('sharpe_ratio', 0):.3f}  |  "
             f"Max DD = {bm.get('max_drawdown', 0)*100:.2f}%"
         )
+
+
+def plot_turbulence_plotly(
+    df: pd.DataFrame,
+    threshold: float = 100.0,
+    turbulence_type: str = "cooldown_period",
+    ewma_span: int = 10,
+    threshold_trigger: Optional[float] = None,
+    threshold_exit: Optional[float] = None,
+) -> Optional[go.Figure]:
+    """Interactive Plotly chart of Kritzman Financial Turbulence Index with emergency threshold lines."""
+    turb_col = next((c for c in ["TURBULENCE", "turbulence"] if c in df.columns), None)
+    if turb_col is None or df.empty:
+        return None
+
+    df_t = df.copy()
+    if "date" in df_t.columns:
+        df_t["date"] = pd.to_datetime(df_t["date"])
+        # Take single row per date if df has multiple tickers
+        df_t = df_t.groupby("date", as_index=False)[turb_col].mean().sort_values("date")
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df_t["date"],
+        y=df_t[turb_col],
+        mode="lines",
+        name="Turbulence Thô (Raw)",
+        line=dict(color="#8B5CF6", width=2.0),
+        hovertemplate="<b>%{x|%Y-%m-%d}</b><br><span style='color:#8B5CF6'>■</span> Turbulence Thô: <b>%{y:.2f}</b><extra></extra>",
+    ))
+
+    if turbulence_type in ("ewma_smoothed", "dual_threshold", "ewma_dual_threshold"):
+        df_t["ewma_turb"] = df_t[turb_col].ewm(span=ewma_span, adjust=False).mean()
+        fig.add_trace(go.Scatter(
+            x=df_t["date"],
+            y=df_t["ewma_turb"],
+            mode="lines",
+            name=f"EWMA làm mịn (Span={ewma_span})",
+            line=dict(color="#F59E0B", width=2.5),
+            hovertemplate="<b>%{x|%Y-%m-%d}</b><br><span style='color:#F59E0B'>■</span> EWMA Turbulence: <b>%{y:.2f}</b><extra></extra>",
+        ))
+
+    trig = threshold_trigger if threshold_trigger is not None else threshold
+    exit_trig = threshold_exit if threshold_exit is not None else (trig * 0.45)
+
+    if turbulence_type in ("dual_threshold", "ewma_dual_threshold"):
+        fig.add_hline(
+            y=trig,
+            line_dash="dash",
+            line_color="#EF4444",
+            line_width=1.8,
+            annotation_text=f"🔴 Trigger ON ({trig:.0f})",
+            annotation_position="top right",
+            annotation_font=dict(color="#EF4444", size=11, weight="bold")
+        )
+        fig.add_hline(
+            y=exit_trig,
+            line_dash="dash",
+            line_color="#10B981",
+            line_width=1.8,
+            annotation_text=f"🟢 Exit OFF ({exit_trig:.0f})",
+            annotation_position="bottom right",
+            annotation_font=dict(color="#10B981", size=11, weight="bold")
+        )
+    else:
+        fig.add_hline(
+            y=threshold,
+            line_dash="dash",
+            line_color="#EF4444",
+            line_width=1.8,
+            annotation_text=f"Ngưỡng Phanh Khẩn cấp ({threshold:.0f})",
+            annotation_position="top right",
+            annotation_font=dict(color="#EF4444", size=11, weight="bold")
+        )
+
+    type_labels = {
+        "static": "Static Phanh 1 Ngày",
+        "cooldown_period": "Cooldown Giữ Phanh N Ngày",
+        "ewma_smoothed": f"EWMA làm mịn (Span={ewma_span})",
+        "adaptive_percentile": "Adaptive Percentile Dynamic Threshold",
+        "dual_threshold": f"Dual Threshold Band ({trig:.0f} / {exit_trig:.0f})",
+        "ewma_dual_threshold": f"EWMA Dual Threshold Band ({trig:.0f} / {exit_trig:.0f})",
+    }
+    label_str = type_labels.get(turbulence_type, turbulence_type)
+
+    fig.update_layout(
+        title=dict(
+            text=f"🛡️ Chỉ số Rủi ro Hệ thống Kritzman Turbulence — Chiến lược: [{label_str}]",
+            font=dict(size=14, weight="bold")
+        ),
+        xaxis=dict(title="Ngày", showgrid=True, gridcolor="#F3F4F6"),
+        yaxis=dict(title="Turbulence Score", showgrid=True, gridcolor="#F3F4F6"),
+        hovermode="x unified",
+        template="plotly_white",
+        height=380,
+        font=dict(family="Inter, sans-serif"),
+        margin=dict(l=60, r=30, t=55, b=40),
+    )
+    return fig
+

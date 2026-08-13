@@ -64,11 +64,16 @@ macro_indicators:
     description: "Vietnam 3-Year Government Bond Yield (Risk-Free Rate Proxy)"
     enabled: true
 
+  - name: "TURBULENCE"
+    unit: "score"
+    description: "Kritzman Financial Turbulence Index based on Mahalanobis distance"
+    enabled: true
+
 # =====================================================================
 # PIPELINE EXECUTION SETTINGS
 # =====================================================================
 pipeline_settings:
-  target_asset_class_ids: [5, 6, 7, 8]
+  target_asset_class_ids: [1, 5, 6, 7, 8]
   drop_nan: true
   save_mode: "append"
   scale_features: false

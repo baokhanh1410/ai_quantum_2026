@@ -75,7 +75,7 @@ def get_duckdb_connection(read_only: bool = False):
             try:
                 logger.warning(f"DuckDB write connection failed ({e}), trying read-only mode...")
                 return duckdb.connect(db_path, read_only=True)
-            except Exception:
-                pass
+            except Exception as ro_err:
+                logger.warning(f"DuckDB read-only fallback connection failed: {ro_err}")
         logger.error(f"Failed to connect to DuckDB: {e}")
         raise DatabaseError(f"DuckDB connection error: {e}") from e

@@ -1,10 +1,12 @@
 import pandas as pd
 import logging
 from pathlib import Path
+from typing import List, Optional
 from sqlalchemy import create_engine, text
 import urllib.parse
 import duckdb
-from core.config.settings import settings, MODEL_CONFIG, reload_settings
+from core.config.settings import settings, MODEL_CONFIG, MARKET_CONFIG, reload_settings, get_portfolio_stocks
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +46,18 @@ class DataQueryService:
 
         return df
 
-    def fetch_data(self, start_date: str, end_date: str, lookback_days: int = 45) -> pd.DataFrame:
+    def fetch_data(
+        self,
+        start_date: str,
+        end_date: str,
+        lookback_days: int = 45,
+        stock_tickers: Optional[List[str]] = None,
+    ) -> pd.DataFrame:
         """
         Query OHLCV and technical indicators, then merge them.
         Uses parameterized queries with DuckDB priority.
         If lookback_days > 0, fetches history prior to start_date for indicator warm-up.
+        If stock_tickers is provided or configured in market.yaml, filters stock assets accordingly.
         """
         query_start_date = start_date
         if lookback_days > 0:
@@ -60,6 +69,24 @@ class DataQueryService:
         model_cfg = settings.model_engine.to_dict() if settings.model_engine else {}
         target_asset_ids = model_cfg.get("target_asset_class_ids", [1, 2, 3])
         asset_ids_str = ",".join(map(str, target_asset_ids))
+
+        # Determine active portfolio stock tickers
+        active_stock_tickers = stock_tickers if stock_tickers is not None else get_portfolio_stocks()
+        active_stock_tickers = [s.strip() for s in active_stock_tickers if s and s.strip()]
+
+        stock_ticker_filter = ""
+        if active_stock_tickers:
+            # Check for missing exchange mappings
+            ticker_map = getattr(settings, "ticker_exchange_map", {})
+            missing = [s for s in active_stock_tickers if s not in ticker_map]
+            if missing:
+                logger.warning(
+                    f"Cảnh báo: Các mã cổ phiếu sau chưa được khai báo trong config/assets.yaml (ticker_exchange_map): {missing}"
+                )
+
+            placeholders = ",".join([f"'{s}'" for s in active_stock_tickers])
+            # Stock asset class IDs are 1 (HOSE), 2 (HNX), 3 (UPCoM)
+            stock_ticker_filter = f"AND (t.asset_class_id NOT IN (1, 2, 3) OR t.symbol IN ({placeholders}))"
 
         features = model_cfg.get("features", [])
         feature_filter = ""
@@ -80,6 +107,7 @@ class DataQueryService:
             JOIN tickers t ON o.ticker_id = t.id
             WHERE o.timestamp >= :start_date AND o.timestamp <= :end_date
               AND t.asset_class_id IN ({asset_ids_str})
+              {stock_ticker_filter}
             ORDER BY o.timestamp ASC, t.symbol ASC
         """
         
@@ -94,8 +122,10 @@ class DataQueryService:
             JOIN indicator_types ind ON ti.indicator_type_id = ind.id
             WHERE ti.timestamp >= :start_date AND ti.timestamp <= :end_date
               AND t.asset_class_id IN ({asset_ids_str})
+              {stock_ticker_filter}
               {feature_filter}
         """
+
 
         macro_feature_filter = ""
         if features:

@@ -4,6 +4,7 @@ market_settings:
   market_name: "Vietnam Stock Market"
   currency: "VND"
   trading_days_per_year: 252
+  risk_free_rate: 0.03
 
 # 1. Transaction Costs & Tax Schedules (General Fallback)
 transaction_costs:
@@ -31,9 +32,7 @@ price_limits:
   UPCoM: 0.15                     # Daily limit +/- 15%
 
 # 4. Systemic Risk Controls
-risk_controls:
-  default_turbulence_threshold: 80.0 # Kritzman turbulence index threshold for risk mitigation
-  force_sell_on_turbulence: true      # Force liquidate / shift to Cash on turbulence breach
+# (Note: Turbulence Risk Control Settings are managed in config/model.yaml alongside reward_settings)
 
 # 5. Asset Class Specific Microstructure & Execution Rules
 asset_class_rules:
@@ -86,3 +85,14 @@ asset_class_rules:
     sell_fee_pct: 0.0000
     interest_rate_feature: "VNIBOR_ON" # Lãi suất gửi tích lũy qua đêm liên ngân hàng
     min_cash_buffer_pct: 0.05    # Đệm tiền mặt tối thiểu 5% bảo vệ thanh khoản danh mục
+
+# 6. User Portfolio Stock Selection
+# Danh sách các mã cổ phiếu người dùng chọn đầu tư trong Model Engine
+# Nếu rỗng hoặc không khai báo, hệ thống sẽ lấy tất cả cổ phiếu theo asset_class_ids trong model.yaml
+portfolio_stocks:
+  - "VNM"
+  - "FPT"
+  - "VCB"
+  - "VHM"
+  - "HPG"
+

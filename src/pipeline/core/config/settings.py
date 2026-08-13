@@ -173,6 +173,10 @@ class GlobalSettings:
                 f"Val và Test set đang trùng nhau — data leakage trong model selection!"
             )
 
+    def get_enabled_indicators(self) -> List[Dict[str, Any]]:
+        """Returns list of indicator definitions where enabled is True."""
+        return [ind for ind in self.indicators if ind.get("enabled", True)]
+
 
     def reload(self) -> None:
         """Reloads configuration files from disk."""
@@ -198,3 +202,12 @@ def reload_settings() -> GlobalSettings:
         MARKET_CONFIG.clear()
         MARKET_CONFIG.update(settings.market.to_dict())
     return settings
+
+
+def get_portfolio_stocks() -> List[str]:
+    """Returns the list of user-configured portfolio stock tickers from MARKET_CONFIG."""
+    stocks = MARKET_CONFIG.get("portfolio_stocks", [])
+    if isinstance(stocks, list):
+        return [str(s).strip() for s in stocks if str(s).strip()]
+    return []
+

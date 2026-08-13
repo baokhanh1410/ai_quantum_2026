@@ -1,6 +1,6 @@
 model_engine:
   # Data splitting timelines
-  train_start_date: "2018-08-06"
+  train_start_date: "2018-01-01"
   train_end_date: "2022-12-31"
   val_start_date: "2023-01-01"
   val_end_date: "2023-12-31"
@@ -8,7 +8,7 @@ model_engine:
   test_end_date: "2024-12-31"
 
   # Asset selection (Filter by asset class IDs)
-  target_asset_class_ids: [6, 7, 8] # Includes Sector indices (7), Macro indicators (6, 8), and Gold (5)
+  target_asset_class_ids: [1, 6, 8] # Includes Sector indices (7), Macro indicators (6, 8), and Gold (5)
 
   # Dynamic Input Features from Database
   features:
@@ -24,7 +24,6 @@ model_engine:
 
   # Environment Portfolio Settings
   initial_balance: 1000000000 # 1 Billion VND
-  # (Note: Transaction costs & Turbulence threshold are managed in config/market.yaml as Single Source of Truth)
 
   # Rolling Horizon Episode Settings
   episode_length: 60       # 60 trading days (~1 Quarter) or 252 (~1 Year)
@@ -32,16 +31,40 @@ model_engine:
 
   # Reward Strategy Configuration
   reward_settings:
-    reward_type: "excess_return" # Options: "net_return", "sortino", "drawdown_penalty", "excess_return"
-    scale_factor: 10.0
-    alpha_multiplier: 1.8
-    mdd_threshold: 0.02
-    mdd_penalty_coef: 5.0      # Fix B06: renamed from downside_penalty_coef → mdd_penalty_coef
+    reward_type: "sortino" # Options: "net_return", "sortino", "drawdown_penalty", "excess_return"
+    scale_factor: 5.0
+    alpha_multiplier: 2.0
+    mdd_threshold: 0.03
+    mdd_penalty_coef: 5.0      # mdd_penalty_coef
+    infeasibility_coef: 3.0    # Systemic penalty coefficient for T+2 / lot size infeasible rebalances
+
+  # Systemic Risk Controls / Turbulence Strategy Configuration (Factory Pattern)
+  turbulence_settings:
+    turbulence_type: "dual_threshold" # Options: "static", "cooldown_period", "ewma_smoothed", "adaptive_percentile", "dual_threshold"
+    # Static & Base
+    threshold: 100.0                   # Emergency breach threshold score (default fallback)
+    # Dual Threshold (Hysteresis Band + EWMA + Auto-Calibration)
+    auto_calibrate: false               # Tự động tính ngưỡng Trigger/Exit từ phân phối thống kê tập dữ liệu
+    trigger_percentile: 95.0           # Phanh 100% Cash khi biến động thuộc TOP 10% rủi ro nhất (P90)
+    exit_percentile: 70.0              # Dỡ bỏ phanh khi biến động hạ nhiệt về mức an toàn TOP 30% (P70)
+    threshold_trigger: null            # Đặt con số cụ thể (e.g. 16.0) nếu muốn override thủ công, hoặc null để auto-calibrate
+    threshold_exit: null               # Đặt con số cụ thể (e.g. 12.0) nếu muốn override thủ công, hoặc null để auto-calibrate
+    use_ewma: true                     # Phanh trên tín hiệu EWMA làm mịn để tránh nhiễu ngắn hạn
+    # Cooldown_period
+    cooldown_steps: 10                 # Holds 100% Cash for K consecutive days upon breach (for "cooldown_period")
+    # Ewma_smoothed
+    ewma_span: 10                      # Exponential smoothing memory span in trading days (for "ewma_smoothed")
+    # Adaptive_percentile
+    rolling_window: 252                # Rolling historical window in trading days (for "adaptive_percentile")
+    percentile: 90.0                   # Percentile cutoff (for "adaptive_percentile")
+    force_sell_on_turbulence: true      # Force liquidate / shift to Cash on turbulence breach
+
 
   # Training Execution Settings
   training_settings:
-    total_timesteps: 10000   # Timesteps per model training
+    total_timesteps: 50000   # Timesteps per model training
     eval_deterministic: true
+    random_seed: 42
 
   # Training hyperparameters
   algorithms:
@@ -49,7 +72,7 @@ model_engine:
       learning_rate: 0.00025
       batch_size: 64
       n_steps: 2048
-      ent_coef: 0.01
+      ent_coef: 0.03
     a2c:
       learning_rate: 0.0007
       n_steps: 5

@@ -20,13 +20,17 @@ KEY_TRAIN_START   = "cfg_train_start"
 KEY_TRAIN_END     = "cfg_train_end"
 KEY_VAL_START     = "cfg_val_start"
 KEY_VAL_END       = "cfg_val_end"
+KEY_SELECTED_STOCKS = "selected_portfolio_stocks"
+KEY_MODEL_CONFIG  = "model_config"
 
 _ALL_KEYS = [
     KEY_TRAIN_DATA, KEY_VAL_DATA, KEY_BENCHMARK_DF,
     KEY_TRAINED_MODEL, KEY_MODEL_NAME,
     KEY_DF_ACCOUNT, KEY_DF_ACTIONS, KEY_DF_SHARES,
     KEY_TRAIN_START, KEY_TRAIN_END, KEY_VAL_START, KEY_VAL_END,
+    KEY_SELECTED_STOCKS, KEY_MODEL_CONFIG,
 ]
+
 
 
 def init_state() -> None:

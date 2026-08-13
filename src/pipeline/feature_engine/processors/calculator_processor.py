@@ -10,7 +10,7 @@ Python 3.9+, instead of ``pandas-ta`` which requires Python 3.12+.
 """
 
 import logging
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -223,7 +223,9 @@ class CalculatorProcessor:
         for ind_cfg in macro_indicators:
             name = ind_cfg["name"]
             try:
-                series = self._compute_macro_indicator(name, symbol_data, master_timeline)
+                # Pass the accumulated macro_df so derived indicators (e.g. TURBULENCE_THRESHOLD)
+                # can reference previously computed series (e.g. TURBULENCE) without lookahead bias.
+                series = self._compute_macro_indicator(name, symbol_data, master_timeline, macro_df)
                 macro_df[name] = series
                 logger.debug(f"Computed macro indicator: {name}")
             except FeatureCalculationError:
@@ -241,6 +243,7 @@ class CalculatorProcessor:
         name: str,
         symbol_data: Dict[str, pd.DataFrame],
         master_timeline: pd.DatetimeIndex,
+        accumulated_macro_df: Optional[pd.DataFrame] = None,
     ) -> pd.Series:
         """Dispatches macro indicator computation by name.
 
@@ -248,6 +251,9 @@ class CalculatorProcessor:
             name: The indicator name from features.yaml.
             symbol_data: Dictionary of symbol -> aligned DataFrame.
             master_timeline: The master trading date index.
+            accumulated_macro_df: Macro indicators computed so far in this run.
+                Required for derived indicators that depend on previously computed
+                macro series (e.g. TURBULENCE_THRESHOLD depends on TURBULENCE).
 
         Returns:
             pd.Series aligned to master_timeline.
@@ -262,6 +268,8 @@ class CalculatorProcessor:
             return self._vnibor_on_passthrough(symbol_data, master_timeline)
         elif name == "VN3YT":
             return self._safe_close(symbol_data, "VN3YT", master_timeline)
+        elif name in ("TURBULENCE", "TURBULENCE_INDEX"):
+            return self._kritzman_turbulence(symbol_data, master_timeline)
         else:
             raise FeatureCalculationError(
                 f"Unknown macro indicator '{name}'. "
@@ -271,6 +279,65 @@ class CalculatorProcessor:
     # ------------------------------------------------------------------
     # Macro indicator implementations
     # ------------------------------------------------------------------
+
+    def _kritzman_turbulence(
+        self,
+        symbol_data: Dict[str, pd.DataFrame],
+        timeline: pd.DatetimeIndex,
+        window_size: int = 252,
+    ) -> pd.Series:
+        """Computes Kritzman Financial Turbulence Index based on Mahalanobis distance.
+
+        y_t = (r_t - mu) * Sigma^-1 * (r_t - mu)^T
+        Uses pseudo-inverse np.linalg.pinv to avoid singular matrix exceptions.
+        """
+        price_dict = {}
+        for sym, df in symbol_data.items():
+            if isinstance(df, pd.DataFrame) and "close" in df.columns:
+                # Include stock/index symbols, skip macro symbols if needed
+                s_close = df["close"].reindex(timeline).astype(float)
+                if s_close.notna().sum() > 20:
+                    price_dict[sym] = s_close
+
+        if not price_dict:
+            logger.warning("No valid symbols found for Kritzman turbulence calculation; returning zeros.")
+            return pd.Series(0.0, index=timeline, name="TURBULENCE")
+
+        price_df = pd.DataFrame(price_dict, index=timeline)
+        returns_df = price_df.pct_change()
+
+        n_rows = len(timeline)
+        turb_values = np.zeros(n_rows, dtype=np.float32)
+
+        min_periods = 10
+        for i in range(min_periods, n_rows):
+            hist_returns = returns_df.iloc[max(0, i - window_size) : i].dropna(how="all")
+            # Keep columns with non-zero variance
+            valid_cols = hist_returns.columns[hist_returns.std(ddof=1) > 1e-6]
+            if len(valid_cols) < 2 or len(hist_returns) < min_periods:
+                continue
+
+            sub_hist = hist_returns[valid_cols].dropna()
+            if len(sub_hist) < min_periods:
+                continue
+
+            curr_ret = returns_df.iloc[i][valid_cols].values
+            if np.isnan(curr_ret).any():
+                continue
+
+            mu = sub_hist.mean().values
+            cov = sub_hist.cov().values
+
+            try:
+                inv_cov = np.linalg.pinv(cov)
+                diff = curr_ret - mu
+                dist = float(np.dot(np.dot(diff, inv_cov), diff.T))
+                turb_values[i] = max(0.0, dist)
+            except Exception as e:
+                logger.debug(f"Turbulence calculation failed at index {i}: {e}")
+                turb_values[i] = 0.0
+
+        return pd.Series(turb_values, index=timeline, name="TURBULENCE")
 
     def _yield_curve_slope(
         self,

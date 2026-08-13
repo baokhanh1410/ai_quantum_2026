@@ -121,14 +121,38 @@ class DataProcessor:
                     return pd.Series(z.clip(-clip, clip), index=s.index).fillna(0.0)
                 df[col] = df.groupby('tic')[col].transform(_zscore_normalize)
         
+        # 3.5 Dynamically compute Kritzman Turbulence Index if missing
+        if "TURBULENCE" not in df.columns and "turbulence" not in df.columns:
+            try:
+                from feature_engine.processors.calculator_processor import CalculatorProcessor
+                proc = CalculatorProcessor()
+                master_timeline = pd.DatetimeIndex(pd.to_datetime(df['date'].unique()).sort_values())
+                symbol_data = {}
+                for tic_name, tic_df in df.groupby('tic'):
+                    if 'close' in tic_df.columns:
+                        s_df = tic_df.set_index(pd.to_datetime(tic_df['date']))[['close']].sort_index()
+                        symbol_data[tic_name] = s_df
+                
+                if symbol_data:
+                    turb_s = proc._compute_macro_indicator("TURBULENCE", symbol_data, master_timeline)
+                    turb_df = pd.DataFrame({'date': master_timeline.strftime('%Y-%m-%d'), 'TURBULENCE': turb_s.values})
+                    df = pd.merge(df, turb_df, on='date', how='left')
+                    df['TURBULENCE'] = df['TURBULENCE'].fillna(0.0)
+            except Exception as e:
+                logger.warning(f"Could not calculate TURBULENCE in DataProcessor: {e}")
+                df['TURBULENCE'] = 0.0
+
         # 4. Ensure all required features exist
         for feat in self.features:
             if feat not in df.columns:
                 logger.warning(f"Feature {feat} not found in database. Filling with 0.")
                 df[feat] = 0
                 
-        # 5. Keep ONLY OHLCV columns + configured features to avoid leaking unwanted macro/tech columns
-        keep_cols = [c for c in ['tic', 'date', 'open', 'high', 'low', 'close', 'volume'] + list(self.features) if c in df.columns]
+        # 5. Keep OHLCV + TURBULENCE + configured features
+        always_keep = ['tic', 'date', 'open', 'high', 'low', 'close', 'volume', 'TURBULENCE', 'turbulence']
+        raw_keep = [c for c in always_keep + list(self.features) if c in df.columns]
+        seen = set()
+        keep_cols = [x for x in raw_keep if not (x in seen or seen.add(x))]
         df = df[keep_cols]
 
         # Re-sort to be strictly chronological for the environment
